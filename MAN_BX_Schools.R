@@ -3,7 +3,7 @@
 # install.packages("spdplyr")
 # install.packages("tidycensus")
 # install.packages("acs")
-# install.packages("")
+# install.packages("rstudioapi")
 library(devtools)
 library(acs)
 library(tidycensus)
@@ -22,6 +22,16 @@ library(viridisLite)
 library(tmaptools)
 
 
+
+set_sourcefile_wd <- function() {
+  library(rstudioapi) # 
+  current_path <- getActiveDocumentContext()$path 
+  setwd(dirname(current_path ))
+  print( getwd() )
+}
+
+set_sourcefile_wd()
+setwd("data")
 
 
 # Read in the data from each sheet
@@ -108,19 +118,22 @@ man_bx_zips <- zctas(state = "NY", cb = T,
 
 
 
-# Bus stops - might not be the right viz
-nyc_stops <- readOGR(dsn = "nyc_bus_stops_may2018", layer = "bus_stops_nyc_may2018")
-# man_bx_stops <- nyc_stops@data[nyc_stops$NAMELSAD == "Bronx County" | nyc_stops$NAMELSAD == "New York County", ]
 
-nyc_stops %>% filter(NAMELSAD == "Bronx County" | NAMELSAD == "New York County") -> man_bx_stops
 
-tm_shape(man_bx_ntas) + tm_borders() + tm_shape(nyc_stops) + tm_dots(col = "red")
 
-# Bus routes
-dir()
-readOGR(dsn = "bus_routes_nyc_nov2018", layer = "bus_routes_nyc_nov2018") -> bus_routes_nyc
-
-tm_shape(bus_routes_nyc) + tm_lines()
+# # Bus stops - might not be the right viz
+# nyc_stops <- readOGR(dsn = "nyc_bus_stops_may2018", layer = "bus_stops_nyc_may2018")
+# # man_bx_stops <- nyc_stops@data[nyc_stops$NAMELSAD == "Bronx County" | nyc_stops$NAMELSAD == "New York County", ]
+# 
+# nyc_stops %>% filter(NAMELSAD == "Bronx County" | NAMELSAD == "New York County") -> man_bx_stops
+# 
+# tm_shape(man_bx_ntas) + tm_borders() + tm_shape(nyc_stops) + tm_dots(col = "red")
+# 
+# # Bus routes
+# dir()
+# readOGR(dsn = "bus_routes_nyc_nov2018", layer = "bus_routes_nyc_nov2018") -> bus_routes_nyc
+# 
+# tm_shape(bus_routes_nyc) + tm_lines()
 
 
 # Merge shapefile with application data tabulation of zip codes, removing from
@@ -135,10 +148,20 @@ man_bx_merge <- merge(man_bx_zips,
 # Create a single point shapefile for Samuel Gompers HS
 sam_gompers_hs <- data.frame(name = "Samuel Gompers HS", lat = 40.811227, long = -73.907361)
 
+SpatialPointsDataFrame(coords = c(sam_gompers_hs$lat, sam_gompers_hs$long),
+                       proj4string = CRS(as.character(proj4string(man_bx_merge))), 
+                       data = sam_gompers_hs$name) -> sghs_coords
+
+coordinates(sam_gompers_hs) <- ~long + lat
+
+require(raster)
+projection(sam_gompers_hs) = as.character(proj4string(man_bx_merge))
+dir.create("sghs_coords")
+shapefile(sam_gompers_hs, "sghs_coords/sghs_coords.shp")
 
 
 
-# tm_shape(neighborhoods) + tm_fill(col = "white") + tm_layout(bg.color = "gray90") + 
+# Plot all three years' (2017 - 19) application data
 tmap_mode('plot')
 
 tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
@@ -147,10 +170,10 @@ tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930),
   
 tm_shape(man_bx_zips) + tm_fill(col = "grey90") + tm_layout(bg.color = "grey75") +
   tm_shape(man_bx_merge) + 
-  tm_borders(lw = 1.5) + 
+  tm_borders(lw = 1.5, alpha = .2) + 
   tm_fill(col = "n", title = "Applications", palette = "YlOrBr", colorNA = NULL) + 
   tm_text(text = "GEOID10", size = "n", style = "pretty", size.lim = c(100, 400),
-          shadow = T, legend.size.show = F) +
+          shadow = T, legend.size.show = F, fontface = "bold") +
   tm_layout(main.title = paste("Distribution of", 
                                format(sum(man_bx_apps_by_zip$n), big.mark = ","),
                                paste("applications in Manhattan",
@@ -159,29 +182,13 @@ tm_shape(man_bx_zips) + tm_fill(col = "grey90") + tm_layout(bg.color = "grey75")
             legend.position = c("left", "top"),
             main.title.size = 1.2) + 
   tm_credits("Source: HUM II Recruitment Data, 2017-2019", 
-             position = c("right", "bottom"))
-
-# tmap_mode('plot')
-# tm_basemap(leaflet::providers$Esri.WorldGrayCanvas) + 
-#   tm_shape(nyc_area_zips) + tm_fill(col = "white") + tm_layout(bg.color = "grey95") + tm_borders(col = "grey95") +
-#   tm_shape(man_bx_merge) + 
-#   tm_borders(lw = 1.5, col = "white") + 
-#   tm_fill(col = "n", title = "Applications", palette = "YlOrBr", colorNA = NULL) + 
-#   tm_text(text = "GEOID10", size = .75, shadow = T) +
-#   # tm_shape(nyc_zips) + tm_fill(col = "grey80") + tm_layout(bg.color = "grey95") +
-#   tm_layout(main.title = paste("Distribution of", format(sum(man_bx_apps_by_zip$n), big.mark = ","),
-#                                "applications in Manhattan and the Bronx"),
-#             main.title.position = "center",
-#             main.title.size = 1.2)
+             position = c("right", "bottom")) + 
+  tm_shape(sam_gompers_hs) + tm_symbols(size = .5, col = "#226bf8", style = "pretty", 
+                                        border.lwd = 1.5, border.col = "white", shape = 23)
 
 
 
 
-
-# + tm_shape(bus_routes_nyc) + tm_lines(col = "blue")
-
-
-# + tm_shape(man_bx_stops) + tm_dots(col = "red")
 
 
 
