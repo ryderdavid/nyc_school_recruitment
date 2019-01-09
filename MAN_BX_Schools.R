@@ -97,7 +97,11 @@ recruitment_data_clean <- recruitment_data_man_bx_merged %>%
 # One hand fix to correct a typo in data entry -- the above filter also gets rid
 recruitment_data_clean[recruitment_data_clean$zip == "1.047", "zip"] <- "10473"
 
-
+# get recruitment data clean into a spatial data frame
+# need to refactor code to reference this SPDF rather than the DF?
+recruitment_data_spdf <- recruitment_data_clean
+coordinates(recruitment_data_spdf) <- ~long + lat
+recruitment_data_spdf
 
 
 # Summarize applications by zip and trim out non manhattan-bronx applications
@@ -106,6 +110,9 @@ man_bx_apps_by_zip <- recruitment_data_clean %>%
   filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
 
 
+# recruitment data for manhattan and bx only
+recruitment_data_man_bx <- recruitment_data_clean %>% 
+  filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
 
 
 
@@ -146,6 +153,43 @@ shapefile(sam_gompers_hs, "sghs_coords/sghs_coords.shp")
 # Plot all three years' (2017 - 19) application data
 tmap_mode('plot')
 
+
+
+
+## MAN_BX BACKGROUND MAP AS FUNCTION EVERY TIME
+tmap_man_bx_background <- function() {
+  return(
+    tm_shape(nyc_area_zips, 
+             ylim = c(40.681061, 40.930),
+             xlim = c(-74.041447, -73.78)) +
+      tm_fill(col = "grey90")
+    )
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
          xlim = c(-74.041447, -73.78)) + 
   tm_fill(col = "grey90") +
@@ -178,146 +222,60 @@ tm_shape(man_bx_zips) + tm_fill(col = "grey90") + tm_layout(bg.color = "grey75")
 
 
 
-# Plot 2017 registrations
-registrations_by_zip_2017 <- filter(registrations_by_zip, year == 2017)
-# add spatial data
-registrations_by_zip_2017 <- merge(man_bx_zips, registrations_by_zip_2017,
-                                   by.x = "GEOID10", by.y = "zip")
-# replace all NAs
-# registrations_by_zip_2017$registrations <- 
-#   registrations_by_zip_2017$registrations %>% replace_na(0)
+
+# Turned plotting by registration year into a function
+plot_reg_by_year <- function(yr, rec_data = recruitment_data_clean, p = "Oranges") {
+  
+  reg.by.zip <- rec_data %>% 
+    dplyr::select(application_id, zip, lat, long, year, registration_completed_date) %>% 
+    mutate(registered = ifelse(!is.na(registration_completed_date), 1, 0)) %>% 
+    filter(registered == 1) %>% count(zip, year) %>% 
+    transmute(zip = zip, year = year, registrations = n)
+  
+  # Plot selected year registrations
+  reg.filtered.by.year <- filter(reg.by.zip, year == as.numeric(yr))
+  # add spatial data
+  reg.filtered.by.year <- merge(man_bx_zips, reg.filtered.by.year, 
+                        by.x = "GEOID10", by.y = "zip")
+  
+  regplot.yr <- tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
+                           xlim = c(-74.041447, -73.78)) + 
+    tm_fill(col = "grey90") +
+    tm_shape(reg.filtered.by.year) + 
+    tm_borders(lw = 1.5, alpha = .2) + 
+    tm_fill(col = "registrations", 
+            title = "Registrations", 
+            colorNA = NULL, 
+            palette = p, 
+            style = "pretty") +
+    tm_text(text = "GEOID10", 
+            size = "registrations", 
+            style = "pretty", 
+            size.lim = c(10, 20),
+            shadow = T, 
+            legend.size.show = F, 
+            fontface = "bold") +
+    tm_layout(main.title = paste("Distribution of", 
+                                 format(sum(reg.filtered.by.year$registrations, 
+                                            na.rm = T), big.mark = ","),
+                                 paste("registrations in Manhattan",
+                                       "and the Bronx,\n",
+                                       as.character(yr),
+                                       "School Year,",
+                                       "by Zip Code Tabulation Area")),
+              main.title.position = "center",
+              legend.position = c("left", "top"),
+              main.title.size = 1.2)
+  
+  return(regplot.yr)
+  
+}
 
 
-tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
-         xlim = c(-74.041447, -73.78)) + 
-  tm_fill(col = "grey90") +
-  tm_shape(registrations_by_zip_2017) + 
-  tm_borders(lw = 1.5, alpha = .2) + 
-  tm_fill(col = "registrations", title = "Registrations", colorNA = NULL, palette = "Oranges", style = "pretty") + # , breaks = c(1, 5, 10, 15, 20), col.alpha = "registrations") +
-  tm_text(text = "GEOID10", size = "registrations", style = "pretty", size.lim = c(10, 20),
-          shadow = T, legend.size.show = F, fontface = "bold") +
-  tm_layout(main.title = paste("Distribution of", 
-                               format(sum(registrations_by_zip_2017$registrations, na.rm = T), big.mark = ","),
-                               paste("registrations in Manhattan",
-                                     "and the Bronx,\n2017-2018 School Year, by Zip Code Tabulation Area")),
-            main.title.position = "center",
-            legend.position = c("left", "top"),
-            main.title.size = 1.2)
-
-
-
-
-
-registrations_by_zip <- recruitment_data_clean %>% 
-  dplyr::select(application_id, zip, lat, long, year, registration_completed_date) %>% 
-  mutate(registered = ifelse(!is.na(registration_completed_date), 1, 0)) %>% 
-  filter(registered == 1) %>% count(zip, year) %>% 
-  transmute(zip = zip, year = year, registrations = n)
-print(registrations_by_zip)
-
-
-# Plot selected year registrations
-regs_by_2017 <- filter(registrations_by_zip, year == 2017)
-# add spatial data
-regs_by_2017 <- merge(man_bx_zips, regs_by_2017, 
-                      by.x = "GEOID10", by.y = "zip")
-
-regplot_2017 <- tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
-         xlim = c(-74.041447, -73.78)) + 
-  tm_fill(col = "grey90") +
-  tm_shape(regs_by_2017) + 
-  tm_borders(lw = 1.5, alpha = .2) + 
-  tm_fill(col = "registrations", 
-          title = "Registrations", 
-          colorNA = NULL, 
-          palette = "Oranges", 
-          style = "pretty") +
-  tm_text(text = "GEOID10", 
-          size = "registrations", 
-          style = "pretty", 
-          size.lim = c(10, 20),
-          shadow = T, 
-          legend.size.show = F, 
-          fontface = "bold") +
-  tm_layout(main.title = paste("Distribution of", 
-                               format(sum(regs_by_2017$registrations, 
-                                          na.rm = T), big.mark = ","),
-                               paste("registrations in Manhattan",
-                                     "and the Bronx,\n",
-                                     "2017 School Year,",
-                                     "by Zip Code Tabulation Area")),
-            main.title.position = "center",
-            legend.position = c("left", "top"),
-            main.title.size = 1.2)
-
-# Plot selected year registrations
-regs_by_2018 <- filter(registrations_by_zip, year == 2018)
-# add spatial data
-regs_by_2018 <- merge(man_bx_zips, regs_by_2018, 
-                                 by.x = "GEOID10", by.y = "zip")
-
-regplot_2018 <- tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
-         xlim = c(-74.041447, -73.78)) + 
-  tm_fill(col = "grey90") +
-  tm_shape(regs_by_2018) + 
-  tm_borders(lw = 1.5, alpha = .2) + 
-  tm_fill(col = "registrations", 
-          title = "Registrations", 
-          colorNA = NULL, 
-          palette = "Greens", 
-          style = "pretty") +
-  tm_text(text = "GEOID10", 
-          size = "registrations", 
-          style = "pretty", 
-          size.lim = c(10, 20),
-          shadow = T, 
-          legend.size.show = F, 
-          fontface = "bold") +
-  tm_layout(main.title = paste("Distribution of", 
-                               format(sum(regs_by_2018$registrations, 
-                                          na.rm = T), big.mark = ","),
-                               paste("registrations in Manhattan",
-                                     "and the Bronx,\n",
-                                     "2018 School Year,",
-                                     "by Zip Code Tabulation Area")),
-            main.title.position = "center",
-            legend.position = c("left", "top"),
-            main.title.size = 1.2)
-
-
-# Plot selected year registrations
-regs_by_2019 <- filter(registrations_by_zip, year == 2019)
-# add spatial data
-regs_by_2019 <- merge(man_bx_zips, regs_by_2019, 
-                      by.x = "GEOID10", by.y = "zip")
-
-regplot_2019 <- tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
-         xlim = c(-74.041447, -73.78)) + 
-  tm_fill(col = "grey90") +
-  tm_shape(regs_by_2019) + 
-  tm_borders(lw = 1.5, alpha = .2) + 
-  tm_fill(col = "registrations", 
-          title = "Registrations", 
-          colorNA = NULL, 
-          palette = "Blues", 
-          style = "pretty") +
-  tm_text(text = "GEOID10", 
-          size = "registrations", 
-          style = "pretty", 
-          size.lim = c(10, 20),
-          shadow = T, 
-          legend.size.show = F, 
-          fontface = "bold") +
-  tm_layout(main.title = paste("Distribution of", 
-                               format(sum(regs_by_2019$registrations, 
-                                          na.rm = T), big.mark = ","),
-                               paste("registrations in Manhattan",
-                                     "and the Bronx,\n",
-                                     "2019 School Year,",
-                                     "by Zip Code Tabulation Area")),
-            main.title.position = "center",
-            legend.position = c("left", "top"),
-            main.title.size = 1.2)
+# Plot by year
+plot_reg_by_year(2017)
+plot_reg_by_year(2018, p = "Greens")
+plot_reg_by_year(2019)
 
 
 
@@ -326,69 +284,6 @@ regplot_2019 <- tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930),
 
 
 
-
-
-
-
-
-
-
-
-
-
-man_bx_merge <- merge(man_bx_zips, 
-                      man_bx_apps_by_zip, 
-                      by.x = "GEOID10", 
-                      by.y = "zip") %>% filter(!is.na(n))
-
-# Explore: Trying to 
-recruitment_data_clean %>% 
-  count(zip, year) %>% 
-  spread(year, n, fill = 0) %>% 
-  mutate(dist_17_18 = `2018` - `2017`, 
-         pct_chg_17_18 = `2018` - `2017` / `2017`, 
-         dist_18_19 = `2019` - `2018`, 
-         pct_chg_18_19 = `2019` - `2018` / `2018`)
-
-recruit
-
-recruitment_data_clean[recruitment_data_clean$pct_chg]
-
-
-
-
-
-
-
-
-
-
-
-# get top five recruiting zips from man_bx_merge, then save as vector those
-# zips. Then use those to filter the main recruitment record, and plot on
-# stacked barplot by zipcode to show proportion coming from each year
-
-# Explore top five zips
-class(man_bx_merge@data)
-man_bx_merge@data %>% top_n(5, n) %>% pull(GEOID10) -> top_zips
-
-
-top_zip_records <- recruitment_data_clean %>% filter(zip %in% top_zips)
-
-top_zip_records %>% count(zip, year) -> top_zip_totals_by_year
-
-# levels(top_zip_totals_by_year$year)
-# top_zip_totals_by_year %>% mutate(year = factor(year, levels = c("2019", "2018", "2017"))) -> test123
-# 
-# 
-# 
-# ggplot(top_zip_totals_by_year, aes(zip, n)) + geom_bar(stat = "identity", position = "stack")
-# 
-# ggplot() + geom_bar(aes(x = zip, y = n, fill = year), 
-#                     data = top_zip_totals_by_year, stat = "identity")
-# 
-# ggplot() + geom_bar(aes(x = zip, y = n, fill = year), 
-#                     data = test123, stat = "identity")
 
 
 
@@ -400,7 +295,79 @@ top_zip_records %>% count(zip, year) -> top_zip_totals_by_year
 
 
 # 
-# RSocrata::read.socrata("https://data.cityofnewyork.us/resource/ffxx-dfvk.json") -> apts
+# # Explore: Trying to 
+# recruitment_data_clean %>% 
+#   count(zip, year) %>% 
+#   spread(year, n, fill = 0) %>% 
+#   mutate(dist_17_18 = `2018` - `2017`, 
+#          pct_chg_17_18 = `2018` - `2017` / `2017`, 
+#          dist_18_19 = `2019` - `2018`, 
+#          pct_chg_18_19 = `2019` - `2018` / `2018`)
 # 
-# names(apts)
-# apts["location_street_d"]
+# 
+# recruitment_data_clean[recruitment_data_clean$pct_chg]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+nyc_sds <- readOGR(dsn = "nysd_18d", layer = "nysd")
+
+nyc_sds
+
+
+tm_shape(nyc_area_zips, 
+         ylim = c(40.681061, 40.930),
+         xlim = c(-74.041447, -73.78)) +
+  tm_fill(col = "grey90") + 
+  tm_shape(nyc_sds) + tm_borders()
+
+
+tmap_man_bx_background() + 
+  tm_shape(nyc_sds) + tm_borders() + tm_text(text = "SchoolDist")
+
+
+
+
+
+
+
+
+
+
+
+
+# trying to plot points over nyc_sds
+
+proj4string(recruitment_data_spdf) <- proj4string(nyc_sds)
+plot(nyc_sds)
+plot(recruitment_data_spdf, add = T, col = "red")
+
+plot(recruitment_data_spdf)
+
+recruitment_data_clean %>% filter()
+
+
+
+
+plot(recruitment_data_spdf, col = "red")
+
+
+
+
+
+
+
