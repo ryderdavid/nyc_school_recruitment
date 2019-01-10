@@ -124,6 +124,10 @@ nyc_area_zips <- zctas(cb = T, starts_with = c('070','076','073','100','101',
                                                '107','108','109','110','111',
                                                '112','113','114'))
 
+##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
+# CRS to transform projeections of any other layer being used when necessary
+NYC_CRS <- proj4string(nyc_area_zips)
+
 # Collect just the ZCTAs we're interested in - Man/Bx
 man_bx_zips <- zctas(state = "NY", cb = T, 
                      starts_with = c("100", "101", "102", "104"))
@@ -136,25 +140,50 @@ man_bx_merge <- merge(man_bx_zips,
                       by.x = "GEOID10", 
                       by.y = "zip") %>% filter(!is.na(n))
 
-man_bx_merge
+
 
 # Create a single point shapefile for Samuel Gompers HS
 sam_gompers_hs <- data.frame(name = "Samuel Gompers HS", lat = 40.811227, long = -73.907361)
-
 coordinates(sam_gompers_hs) <- ~long + lat
 
 require(raster)
-projection(sam_gompers_hs) = as.character(proj4string(man_bx_merge))
+projection(sam_gompers_hs) = as.character(proj4string(man_bx_merge)) # update this to method used elsewhere
 dir.create("sghs_coords")
 shapefile(sam_gompers_hs, "sghs_coords/sghs_coords.shp")
 
 
 
+## Create a "fixed" shapefile of NYC School Districts
+# Download School District Shapefile from:
+# https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-data/nysd_18d.zip
+nyc_sds <- readOGR(dsn = "nysd_18d", layer = "nysd") 
+nyc_sds <- spTransform(nyc_sds, CRS(NYC_CRS)) # set NYC SD proj to common proj
+
+# Perform a little surgery on NYC School District 10. SD10 is mostly in the
+# Bronx, but a tiny bit of it (Marble Hill) is in Manhattan but on the Bronx
+# side of the river. The shapefile divides SD into manhattan and bx sides, this
+# script merges those into a borough-agnostic polygon. 
+
+# isolate sd10's data, sum the area, drop the length. Note this will add
+# problematic border length data on SD10, since we're erasing internal
+# perimeter. Don't use the length. 
+sd10_data <- nyc_sds@data %>% filter(SchoolDist == 10) %>%
+  summarise_at(c("Shape_Area", "Shape_Leng"), sum) %>% 
+  mutate(SchoolDist = as.integer(10))
+
+# aggregate both polygons for SD10 into a single poly.
+sd10_one_poly <- nyc_sds %>% filter(SchoolDist == 10) %>% aggregate()
+
+# combine the above polygons and data into a single SPDF
+sd10_spdf <- SpatialPolygonsDataFrame(sd10_one_poly, sd10_data)
+
+# bind together shapefile of polys other than SD10 with the new merged SD10 SPDF
+nyc_sds_fixed <- bind(sd10_spdf, filter(nyc_sds, SchoolDist != 10))
+
+
+
 # Plot all three years' (2017 - 19) application data
 tmap_mode('plot')
-
-
-
 
 ## MAN_BX BACKGROUND MAP AS FUNCTION EVERY TIME
 tmap_man_bx_background <- function() {
@@ -169,28 +198,8 @@ tmap_man_bx_background <- function() {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
+## Plot Applications by Zip Code:
+tm_shape(nyc_areoa_zips, ylim = c(40.681061, 40.930), 
          xlim = c(-74.041447, -73.78)) + 
   tm_fill(col = "grey90") +
   
@@ -320,54 +329,89 @@ plot_reg_by_year(2019)
 
 
 
+###############################################################################
+###    Question: which school district are most applications coming from?   ###
+###    note: http://www.guru-gis.net/count-points-in-polygons/              ###
+###############################################################################
 
 
 
+# create application coordinate points from recruitment data (get necessary
+# cols, create a logical var for whether student registered or not, then drop
+# reg date var)
+application_points <- recruitment_data_clean %>% 
+  dplyr::select(application_id, year, long, lat, 
+                registration_completed_date, submission_date) %>% 
+  mutate(registered = ifelse(!is.na(registration_completed_date), 1, 0)) %>% 
+  dplyr::select(-registration_completed_date)
 
-nyc_sds <- readOGR(dsn = "nysd_18d", layer = "nysd")
-
-nyc_sds
-
-
-tm_shape(nyc_area_zips, 
-         ylim = c(40.681061, 40.930),
-         xlim = c(-74.041447, -73.78)) +
-  tm_fill(col = "grey90") + 
-  tm_shape(nyc_sds) + tm_borders()
-
-
-tmap_man_bx_background() + 
-  tm_shape(nyc_sds) + tm_borders() + tm_text(text = "SchoolDist")
+coordinates(application_points) <- ~long + lat # move coords into SPDF slot
+proj4string(application_points) <- CRS(NYC_CRS) # set common projection
 
 
+# create registrered coordinate points - take applications above and filter by
+# only those that registered
+registered_points <- application_points %>% 
+  filter(registered == 1)
 
 
+# ID which polygon (SD) each point lands in
+res <- over(application_points, nyc_sds_fixed)
 
 
+#### HOW MANY APPLICATIONS PER SD? 
+
+# tabulate points per SD polygon, then cast as tibble, then rename vars to be
+# more readable
+applications_per_sd <- as.tibble(table(res$SchoolDist)) %>% 
+  rename(SchoolDist = Var1, applications = n) %>% 
+  mutate(SchoolDist = as.integer(SchoolDist))
+
+# to the SPDF of school districts, add the number of applications taking place
+# in each SD
+applications_per_sd_spdf <- merge(nyc_sds_fixed, applications_per_sd,
+      by.x = "SchoolDist", by.y = "SchoolDist")
 
 
+# replace NAs in applications variable with 0s
+applications_per_sd_spdf <- applications_per_sd_spdf %>% 
+  mutate(applications = ifelse(is.na(applications), 0, applications))
 
 
+# create a pretty label variable combining SD number and number of applications
+applications_per_sd_spdf <- applications_per_sd_spdf %>% 
+  mutate(label = paste("SD", as.character(SchoolDist), ":\n", 
+                       as.character(applications), sep = ""))
 
 
-# trying to plot points over nyc_sds
+# plot applications per SD
+tmap_mode("plot")
 
-proj4string(recruitment_data_spdf) <- proj4string(nyc_sds)
-plot(nyc_sds)
-plot(recruitment_data_spdf, add = T, col = "red")
+tmap_man_bx_background() +
+  tm_shape(applications_per_sd_spdf) +
+  tm_borders(alpha = 0.3, lw = 1.5) + 
+  tm_fill(col = "applications") + 
 
-plot(recruitment_data_spdf)
-
-recruitment_data_clean %>% filter()
-
-
-
-
-plot(recruitment_data_spdf, col = "red")
-
-
-
-
+tm_shape(nyc_area_zips) + tm_borders(alpha = 0.1, lw = 0.8) +
+  
+tm_shape(applications_per_sd_spdf) +
+  tm_text(text = "label", fontface = "bold", style = "pretty", 
+          size = "applications", legend.size.show = F) + 
+  tm_layout(main.title = "Applications per School District, 2017-2019 School Years", 
+            main.title.position = ("center"), legend.position = c("left", "top"))
+  
 
 
-
+### plot applications in 2017
+tmap_man_bx_background() +
+  tm_shape(applications_per_sd_spdf) +
+  tm_borders(alpha = 0.3, lw = 1.5) + 
+  tm_fill(col = "applications") + 
+  
+  tm_shape(nyc_area_zips) + tm_borders(alpha = 0.1, lw = 0.8) +
+  
+  tm_shape(applications_per_sd_spdf) +
+  tm_text(text = "label", fontface = "bold", style = "pretty", 
+          size = "applications", legend.size.show = F) + 
+  tm_layout(main.title = "Applications per School District, 2017-2019 School Years", 
+            main.title.position = ("center"), legend.position = c("left", "top"))
