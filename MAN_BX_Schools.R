@@ -195,11 +195,19 @@ tmap_man_bx_background <- function() {
     )
 }
 
+tmap_man_bx_zoom <- function() {
+  return(
+    tm_shape(nyc_area_zips, 
+             ylim = c(40.77, 40.918),
+             xlim = c(-73.98, -73.78)) +
+      tm_fill(col = "grey90")
+  )
+}
 
 
 
 ## Plot Applications by Zip Code:
-tm_shape(nyc_areoa_zips, ylim = c(40.681061, 40.930), 
+tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
          xlim = c(-74.041447, -73.78)) + 
   tm_fill(col = "grey90") +
   
@@ -247,11 +255,9 @@ plot_reg_by_year <- function(yr, rec_data = recruitment_data_clean, p = "Oranges
   reg.filtered.by.year <- merge(man_bx_zips, reg.filtered.by.year, 
                         by.x = "GEOID10", by.y = "zip")
   
-  regplot.yr <- tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
-                           xlim = c(-74.041447, -73.78)) + 
-    tm_fill(col = "grey90") +
+  regplot.yr <- tmap_man_bx_zoom() +
     tm_shape(reg.filtered.by.year) + 
-    tm_borders(lw = 1.5, alpha = .2) + 
+    tm_borders(lw = 1.5, alpha = .3) + 
     tm_fill(col = "registrations", 
             title = "Registrations", 
             colorNA = NULL, 
@@ -282,7 +288,7 @@ plot_reg_by_year <- function(yr, rec_data = recruitment_data_clean, p = "Oranges
 
 
 # Plot by year
-plot_reg_by_year(2017)
+plot_reg_by_year(2017, p = "Reds")
 plot_reg_by_year(2018, p = "Greens")
 plot_reg_by_year(2019)
 
@@ -321,14 +327,6 @@ plot_reg_by_year(2019)
 
 
 
-
-
-
-
-
-
-
-
 ###############################################################################
 ###    Question: which school district are most applications coming from?   ###
 ###    note: http://www.guru-gis.net/count-points-in-polygons/              ###
@@ -336,82 +334,80 @@ plot_reg_by_year(2019)
 
 
 
-# create application coordinate points from recruitment data (get necessary
-# cols, create a logical var for whether student registered or not, then drop
-# reg date var)
-application_points <- recruitment_data_clean %>% 
-  dplyr::select(application_id, year, long, lat, 
-                registration_completed_date, submission_date) %>% 
-  mutate(registered = ifelse(!is.na(registration_completed_date), 1, 0)) %>% 
-  dplyr::select(-registration_completed_date)
-
-coordinates(application_points) <- ~long + lat # move coords into SPDF slot
-proj4string(application_points) <- CRS(NYC_CRS) # set common projection
-
-
-# create registrered coordinate points - take applications above and filter by
-# only those that registered
-registered_points <- application_points %>% 
-  filter(registered == 1)
-
-
-# ID which polygon (SD) each point lands in
-res <- over(application_points, nyc_sds_fixed)
-
-
-#### HOW MANY APPLICATIONS PER SD? 
-
-# tabulate points per SD polygon, then cast as tibble, then rename vars to be
-# more readable
-applications_per_sd <- as.tibble(table(res$SchoolDist)) %>% 
-  rename(SchoolDist = Var1, applications = n) %>% 
-  mutate(SchoolDist = as.integer(SchoolDist))
-
-# to the SPDF of school districts, add the number of applications taking place
-# in each SD
-applications_per_sd_spdf <- merge(nyc_sds_fixed, applications_per_sd,
-      by.x = "SchoolDist", by.y = "SchoolDist")
-
-
-# replace NAs in applications variable with 0s
-applications_per_sd_spdf <- applications_per_sd_spdf %>% 
-  mutate(applications = ifelse(is.na(applications), 0, applications))
-
-
-# create a pretty label variable combining SD number and number of applications
-applications_per_sd_spdf <- applications_per_sd_spdf %>% 
-  mutate(label = paste("SD", as.character(SchoolDist), ":\n", 
-                       as.character(applications), sep = ""))
-
-
-# plot applications per SD
-tmap_mode("plot")
-
-tmap_man_bx_background() +
-  tm_shape(applications_per_sd_spdf) +
-  tm_borders(alpha = 0.3, lw = 1.5) + 
-  tm_fill(col = "applications") + 
-
-tm_shape(nyc_area_zips) + tm_borders(alpha = 0.1, lw = 0.8) +
+plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regonly = F) {
   
-tm_shape(applications_per_sd_spdf) +
-  tm_text(text = "label", fontface = "bold", style = "pretty", 
-          size = "applications", legend.size.show = F) + 
-  tm_layout(main.title = "Applications per School District, 2017-2019 School Years", 
-            main.title.position = ("center"), legend.position = c("left", "top"))
+  yr <- year
+  p <-  palette
+  regonly <- regonly
+
   
+  points <- recruitment_data_clean %>% 
+    dplyr::select(application_id, year, long, lat, 
+                  registration_completed_date, submission_date, year) %>% 
+    mutate(registered = ifelse(!is.na(registration_completed_date), 1, 0)) %>% 
+    dplyr::select(-registration_completed_date)
+  
+  # filter points by passed year
+  points <- points %>% filter(year %in% yr)
+  
+  
+  coordinates(points) <- ~long + lat # move coords into SPDF slot
+  proj4string(points) <- CRS(NYC_CRS) # set common projection
+  
+  if(regonly == T) {
+    points <- points %>% filter(registered == 1)
+  }
+  
+  
+  # create a label that changes format for map plotting based on years selected
+  if(length(yr) == 1) {
+    yrlabel <- paste(as.character(yr), " School Year", sep = "")
+  } else {
+    yrlabel <- paste(min(points$year), "-", max(points$year), " School Years", sep = "")
+  }
+  
+  # requires nyc sds fixed, check how many points plot into nyc sds polys
+  res <- over(points, nyc_sds_fixed)
+  
+  # tabulate points per school district
+  points_per_sd <- as.tibble(table(res$SchoolDist)) %>% 
+    rename(SchoolDist = Var1) %>% 
+    mutate(SchoolDist = as.integer(SchoolDist))
+  
+  
+  # to the SPDF of school districts, add the number of points taking place
+  # in each SD
+  points_per_sd_spdf <- merge(nyc_sds_fixed, points_per_sd,
+                                    by.x = "SchoolDist", by.y = "SchoolDist")
+  
+  
+  # create a pretty label variable combining SD number and number of applications
+  points_per_sd_spdf <- points_per_sd_spdf %>% 
+    mutate(label = paste("SD", as.character(SchoolDist), ":\n", 
+                         as.character(n), sep = ""))
+  
+  # applications or registrations changes title and legend name
+  if(regonly == T) {
+    ar <- "registrations"
+    ar_title <- "Registrations"
+  } else {
+    ar <- "applications"
+    ar_title <- "Applications"
+  }
+  
+  # plot points per SD
+  tmap_mode("plot")
+  
+  tmap_man_bx_zoom() +
+    tm_shape(points_per_sd_spdf) +
+    tm_borders(alpha = 0.3, lw = 1.5) + 
+    tm_fill(col = "n", title = ar, colorNA = NULL, palette = p) + 
+    tm_text(text = "label", fontface = "bold", style = "pretty", 
+            size = "n", legend.size.show = F, shadow = TRUE) + 
+    tm_layout(main.title = paste(ar_title, "per sSchool district,", "\n", yrlabel), 
+              main.title.position = ("center"), legend.position = c("left", "top"))
+  
+}
 
 
-### plot applications in 2017
-tmap_man_bx_background() +
-  tm_shape(applications_per_sd_spdf) +
-  tm_borders(alpha = 0.3, lw = 1.5) + 
-  tm_fill(col = "applications") + 
-  
-  tm_shape(nyc_area_zips) + tm_borders(alpha = 0.1, lw = 0.8) +
-  
-  tm_shape(applications_per_sd_spdf) +
-  tm_text(text = "label", fontface = "bold", style = "pretty", 
-          size = "applications", legend.size.show = F) + 
-  tm_layout(main.title = "Applications per School District, 2017-2019 School Years", 
-            main.title.position = ("center"), legend.position = c("left", "top"))
+plot_sd_chloropleth(year = 2018, palette = "BuGn")
