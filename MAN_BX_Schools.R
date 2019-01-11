@@ -22,6 +22,8 @@ library(viridis)
 library(viridisLite)
 library(tmaptools)
 library(RSocrata)
+library(grid)
+library(gridExtra)
 # to create grid side by side layouts of tmap plots per
 # https://stackoverflow.com/questions/34344454/plot-2-tmap-objects-side-by-side
 library(grid) 
@@ -206,40 +208,6 @@ tmap_man_bx_zoom <- function() {
 
 
 
-## Plot Applications by Zip Code:
-tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
-         xlim = c(-74.041447, -73.78)) + 
-  tm_fill(col = "grey90") +
-  
-tm_shape(man_bx_zips) + tm_fill(col = "grey90") + tm_layout(bg.color = "grey75") +
-  tm_shape(man_bx_merge) + 
-  tm_borders(lw = 1.5, alpha = .2) + 
-  tm_fill(col = "n", title = "Applications", palette = "YlOrBr", colorNA = NULL) + 
-  tm_text(text = "GEOID10", size = "n", style = "pretty", size.lim = c(100, 400),
-          shadow = T, legend.size.show = F, fontface = "bold") +
-  tm_layout(main.title = paste("Distribution of", 
-                               format(sum(man_bx_apps_by_zip$n), big.mark = ","),
-                               paste("applications in Manhattan",
-                                     "and the Bronx,\n2017-2019 School Years, by Zip Code Tabulation Area")),
-            main.title.position = "center",
-            legend.position = c("left", "top"),
-            main.title.size = 1.2) + 
-  tm_credits("Source: HUM II Recruitment Data, 2017-2019", 
-             position = c("right", "bottom")) + 
-  tm_shape(sam_gompers_hs) + tm_symbols(size = .5, col = "#226bf8", style = "pretty", 
-                                        border.lwd = 1.5, border.col = "white", shape = 23)
-
-
-
-
-
-
-
-
-
-
-
-
 # Turned plotting by registration year into a function
 plot_reg_by_year <- function(yr, rec_data = recruitment_data_clean, p = "Oranges") {
   
@@ -287,27 +255,6 @@ plot_reg_by_year <- function(yr, rec_data = recruitment_data_clean, p = "Oranges
 }
 
 
-# Plot by year
-plot_reg_by_year(2017, p = "Reds")
-plot_reg_by_year(2018, p = "Greens")
-plot_reg_by_year(2019)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # 
 # # Explore: Trying to 
@@ -327,19 +274,15 @@ plot_reg_by_year(2019)
 
 
 
-###############################################################################
-###    Question: which school district are most applications coming from?   ###
-###    note: http://www.guru-gis.net/count-points-in-polygons/              ###
-###############################################################################
 
-
+### Question: which school district are most applications coming from?
+### note: http://www.guru-gis.net/count-points-in-polygons/
 
 plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regonly = F) {
   
   yr <- year
   p <-  palette
   regonly <- regonly
-
   
   points <- recruitment_data_clean %>% 
     dplyr::select(application_id, year, long, lat, 
@@ -404,10 +347,182 @@ plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regon
     tm_fill(col = "n", title = ar, colorNA = NULL, palette = p) + 
     tm_text(text = "label", fontface = "bold", style = "pretty", 
             size = "n", legend.size.show = F, shadow = TRUE) + 
-    tm_layout(main.title = paste(ar_title, "per sSchool district,", "\n", yrlabel), 
-              main.title.position = ("center"), legend.position = c("left", "top"))
+    tm_layout(main.title = paste(ar_title, "per school district,", "\n", yrlabel), 
+              main.title.position = ("center"), fontface = "bold", legend.position = c("left", "top"))
   
 }
 
 
-plot_sd_chloropleth(year = 2018, palette = "BuGn")
+### Question: where are candidate students best converting from applications to registrations?
+### note: http://www.guru-gis.net/count-points-in-polygons/
+
+plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
+  
+  yr <- year
+  p <-  palette
+  
+  yr <- 2017
+  p <- "YlOrBr"
+  
+  
+  app_points <- recruitment_data_clean %>% 
+    dplyr::select(application_id, year, long, lat, 
+                  registration_completed_date, submission_date, year) %>% 
+    mutate(registered = ifelse(!is.na(registration_completed_date), 1, 0)) %>% 
+    dplyr::select(-registration_completed_date)
+  
+  # filter points by passed year
+  app_points <- app_points %>% filter(year %in% yr)
+  
+  
+  coordinates(app_points) <- ~long + lat # move coords into SPDF slot
+  proj4string(app_points) <- CRS(NYC_CRS) # set common projection
+  
+  
+  # create a reg_points SPDF that only contains successful registrations
+  reg_points <- app_points %>% filter(registered == 1)
+  
+  coordinates(reg_points) <- ~long + lat # move coords into SPDF slot
+  proj4string(reg_points) <- CRS(NYC_CRS) # set common projection
+  
+  # # create a label that changes format for map plotting based on years selected
+  # if(length(yr) == 1) {
+  #   yrlabel <- paste(as.character(yr), " School Year", sep = "")
+  # } else {
+  #   yrlabel <- paste(min(points$year), "-", max(points$year), " School Years", sep = "")
+  # }
+  
+  # calc how many applications and registrations plot into nyc sds polys
+  apps_over_sds <- over(app_points, nyc_sds_fixed)
+  regs_over_sds <- over(reg_points, nyc_sds_fixed)
+  
+  # tabulate applications and registrations per school district
+  total_apps_per_sd <- as.tibble(table(apps_over_sds$SchoolDist)) %>% 
+    rename(SchoolDist = Var1, apps = n) %>% 
+    mutate(SchoolDist = as.integer(SchoolDist))
+  
+  total_regs_per_sd <- as.tibble(table(regs_over_sds$SchoolDist)) %>% 
+    rename(SchoolDist = Var1, regs = n) %>% 
+    mutate(SchoolDist = as.integer(SchoolDist))
+  
+  # merge both attributes and get apps -> regs conversion rate
+  conversions_per_sd <- merge(total_apps_per_sd, 
+                              total_regs_per_sd, by = "SchoolDist") %>% 
+    mutate(rate = regs / apps)
+  
+  conversions_per_sd
+  
+  # merge apps and regs per sd with nyc sds shapefile
+  apps_per_sd_spdf <- merge(nyc_sds_fixed, total_apps_per_sd,
+                              by.x = "SchoolDist", by.y = "SchoolDist")
+  
+  regs_per_sd_spdf <- merge(nyc_sds_fixed, total_regs_per_sd,
+                            by.x = "SchoolDist", by.y = "SchoolDist")
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  # # create a pretty label variable combining SD number and number of applications
+  # points_per_sd_spdf <- points_per_sd_spdf %>% 
+  #   mutate(label = paste("SD", as.character(SchoolDist), ":\n", 
+  #                        as.character(n), sep = ""))
+  
+  # applications or registrations changes title and legend name
+  if(regonly == T) {
+    ar <- "registrations"
+    ar_title <- "Registrations"
+  } else {
+    ar <- "applications"
+    ar_title <- "Applications"
+  }
+  
+  # plot points per SD
+  tmap_mode("plot")
+  
+  tmap_man_bx_zoom() +
+    tm_shape(points_per_sd_spdf) +
+    tm_borders(alpha = 0.3, lw = 1.5) + 
+    tm_fill(col = "n", title = ar, colorNA = NULL, palette = p) + 
+    tm_text(text = "label", fontface = "bold", style = "pretty", 
+            size = "n", legend.size.show = F, shadow = TRUE) + 
+    tm_layout(main.title = paste(ar_title, "per school district,", "\n", yrlabel), 
+              main.title.position = ("center"), fontface = "bold", legend.position = c("left", "top"))
+  
+}
+
+
+## Plot Applications by Zip Code:
+tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
+         xlim = c(-74.041447, -73.78)) + 
+  tm_fill(col = "grey90") +
+  
+  tm_shape(man_bx_zips) + tm_fill(col = "grey90") + tm_layout(bg.color = "grey75") +
+  tm_shape(man_bx_merge) + 
+  tm_borders(lw = 1.5, alpha = .2) + 
+  tm_fill(col = "n", title = "Applications", palette = "YlOrBr", colorNA = NULL) + 
+  tm_text(text = "GEOID10", size = "n", style = "pretty", size.lim = c(100, 400),
+          shadow = T, legend.size.show = F, fontface = "bold") +
+  tm_layout(main.title = paste("Distribution of", 
+                               format(sum(man_bx_apps_by_zip$n), big.mark = ","),
+                               paste("applications in Manhattan",
+                                     "and the Bronx,\n2017-2019 School Years, by Zip Code Tabulation Area")),
+            main.title.position = "center",
+            legend.position = c("left", "top"),
+            main.title.size = 1.2) + 
+  tm_credits("Source: HUM II Recruitment Data, 2017-2019", 
+             position = c("right", "bottom")) + 
+  tm_shape(sam_gompers_hs) + tm_symbols(size = .5, col = "#226bf8", style = "pretty", 
+                                        border.lwd = 1.5, border.col = "white", shape = 23)
+
+
+
+
+# demonstrate application to registration comparisons
+
+
+
+
+
+
+
+
+
+
+
+# Plot by year
+plot_reg_by_year(2017, p = "Reds")
+plot_reg_by_year(2018, p = "Greens")
+plot_reg_by_year(2019)
+
+
+# plot applications and registrations by school district
+tmap_arrange(plot_sd_chloropleth(year = 2017), 
+             plot_sd_chloropleth(year = 2018, palette = "BuGn"), 
+             plot_sd_chloropleth(year = 2019, palette = "Reds"), 
+             nrow = 1, ncol = 3, asp = .85)
+
+tmap_arrange(plot_sd_chloropleth(year = 2017, regonly = T), 
+             plot_sd_chloropleth(year = 2018, palette = "BuGn", regonly = T), 
+             nrow = 1, ncol = 2, asp = NA)
+
+
+
+
+
