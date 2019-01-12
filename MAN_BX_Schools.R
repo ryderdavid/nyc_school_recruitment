@@ -5,6 +5,22 @@
 # install.packages("acs")
 # install.packages("rstudioapi")
 
+
+check.packages <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c('devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
+              'tmap', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
+              'tmaptools', 'viridis', 'viridisLite', 'RSocrata', 'grid', 'gridExtra', 'rstudioapi')
+
+check.packages(packages)
+
+# need local package gdal
+
 library(devtools)
 library(acs)
 library(tidycensus)
@@ -14,7 +30,6 @@ library(sp)
 library(tmap)
 library(readxl)
 library(ggplot2)
-library(sp)
 library(rgdal)
 library(spdplyr)
 library(RColorBrewer)
@@ -27,6 +42,7 @@ library(gridExtra)
 # to create grid side by side layouts of tmap plots per
 # https://stackoverflow.com/questions/34344454/plot-2-tmap-objects-side-by-side
 library(grid) 
+
 
 
 
