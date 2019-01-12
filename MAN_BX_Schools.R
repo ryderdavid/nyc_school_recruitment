@@ -410,8 +410,16 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
                               total_regs_per_sd, by = "SchoolDist") %>% 
     mutate(rate = regs / apps)
   
-  conversions_per_sd
+  # tidy the dataframe for plotting (one observation per line)
+  conversions_for_plotting <- conversions_per_sd %>% filter(apps > 0) %>% gather("type", "count", 2:3)
   
+  ggplot(data = conversions_for_plotting, 
+         aes(x = as.factor(SchoolDist), y = count, fill = type)) + 
+    geom_bar(stat = "identity") + 
+    coord_flip()
+  
+  
+
   # merge apps and regs per sd with nyc sds shapefile
   apps_per_sd_spdf <- merge(nyc_sds_fixed, total_apps_per_sd,
                               by.x = "SchoolDist", by.y = "SchoolDist")
