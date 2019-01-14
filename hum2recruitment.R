@@ -376,6 +376,16 @@ plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regon
 }
 
 
+
+
+
+###
+### LOAD ONLY TO HERE
+
+
+
+
+
 ### Question: where are candidate students best converting from applications to registrations?
 ### note: http://www.guru-gis.net/count-points-in-polygons/
 
@@ -396,53 +406,50 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
   
   # filter points by passed year
   app_points <- app_points %>% filter(year %in% yr)
-  
-  
+
   coordinates(app_points) <- ~long + lat # move coords into SPDF slot
   proj4string(app_points) <- CRS(NYC_CRS) # set common projection
   
   
   # create a reg_points SPDF that only contains successful registrations
   reg_points <- app_points %>% filter(registered == 1)
-  
+
   coordinates(reg_points) <- ~long + lat # move coords into SPDF slot
   proj4string(reg_points) <- CRS(NYC_CRS) # set common projection
   
-  # # create a label that changes format for map plotting based on years selected
-  # if(length(yr) == 1) {
-  #   yrlabel <- paste(as.character(yr), " School Year", sep = "")
-  # } else {
-  #   yrlabel <- paste(min(points$year), "-", max(points$year), " School Years", sep = "")
-  # }
+  # calc how many applications and registrations plot into nyc sds polys. Fun
+  # over() introduces NAs where points plot outside the scope of the NYC sds I
+  # have trimmed the plot to (say if someone has applied from Jersey or out of
+  # state), so after checking which poly each point plots over, I filter out any
+  # that have NAs (aka where they are outside the scope of the query.)
+  apps_over_sds <- over(app_points, nyc_sds_fixed) %>% filter_all(any_vars(!is.na(.)))
+  regs_over_sds <- over(reg_points, nyc_sds_fixed) %>% filter_all(any_vars(!is.na(.)))
   
-  # calc how many applications and registrations plot into nyc sds polys
-  apps_over_sds <- over(app_points, nyc_sds_fixed)
-  regs_over_sds <- over(reg_points, nyc_sds_fixed)
   
   # tabulate applications and registrations per school district
-  total_apps_per_sd <- as.tibble(table(apps_over_sds$SchoolDist)) %>% 
-    rename(SchoolDist = Var1, apps = n) %>% 
-    mutate(SchoolDist = as.integer(SchoolDist))
-  
-  total_regs_per_sd <- as.tibble(table(regs_over_sds$SchoolDist)) %>% 
-    rename(SchoolDist = Var1, regs = n) %>% 
-    mutate(SchoolDist = as.integer(SchoolDist))
+  total_apps_per_sd <- apps_over_sds %>% count(SchoolDist) %>% rename(apps=n)
+  total_regs_per_sd <- regs_over_sds %>% count(SchoolDist) %>% rename(regs=n)
+
   
   # merge both attributes and get apps -> regs conversion rate
   conversions_per_sd <- merge(total_apps_per_sd, 
                               total_regs_per_sd, by = "SchoolDist") %>% 
     mutate(rate = regs / apps)
   
+  # merge conversions with spatial data on school districts, and remove SDs
+  # where no applications or registrations were plotted
+  conversions_per_sd <- conversions_per_sd %>% 
+    merge(nyc_sds_fixed, conversions_per_sd,
+          by.x = "SchoolDist", 
+          by.y = "SchoolDist") %>% 
+    filter(!is.na(apps) & !is.na(regs) & !is.na(rate))
+  
   conversions_per_sd
   
-  # merge apps and regs per sd with nyc sds shapefile
-  apps_per_sd_spdf <- merge(nyc_sds_fixed, total_apps_per_sd,
-                              by.x = "SchoolDist", by.y = "SchoolDist")
   
-  regs_per_sd_spdf <- merge(nyc_sds_fixed, total_regs_per_sd,
-                            by.x = "SchoolDist", by.y = "SchoolDist")
-  
-  
+  ggplot(data = conversions_per_sd, aes(x = as.factor(SchoolDist), y = apps)) + 
+    geom_bar(stat = "identity", fill) + coord_flip()
+
   
   
   
@@ -546,6 +553,6 @@ tmap_arrange(plot_sd_chloropleth(year = 2017, regonly = T),
              nrow = 1, ncol = 2, asp = NA)
 
 
+plot(nyc_sds_fixed)
 
-
-
+tm_shape(nyc_sds_fixed) + tm_borders()
