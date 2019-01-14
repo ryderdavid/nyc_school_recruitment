@@ -15,21 +15,22 @@ check.packages <- function(pkg){
 
 # need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
 
-packages <- c('sf', 'V8', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
+packages <- c('sf', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
               'tmap', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'tmaptools', 'viridis', 'viridisLite', 'RSocrata', 'grid', 'gridExtra', 'rstudioapi', 'units')
+              'tmaptools', 'viridis', 'viridisLite', 'RSocrata', 'rstudioapi', 'units')
 
 check.packages(packages)
 
 
-library(rJava)
-library(devtools)
+# library(rJava)
+# library(devtools)
 library(acs)
-library(tidycensus)
+# library(tidycensus)
 library(tidyverse)
 library(tigris)
 library(sp)
 library(tmap)
+library(tmaptools)
 library(readxl)
 library(ggplot2)
 library(rgdal)
@@ -37,16 +38,19 @@ library(spdplyr)
 library(RColorBrewer)
 library(viridis)
 library(viridisLite)
-library(tmaptools)
-library(RSocrata)
-library(grid)
-library(gridExtra)
+
+# library(RSocrata)
+# library(grid)
+# library(gridExtra)
+
 # to create grid side by side layouts of tmap plots per
 # https://stackoverflow.com/questions/34344454/plot-2-tmap-objects-side-by-side
 library(grid)
 
 
 
+library(tidyverse)
+library(readxl)
 
 
 set_sourcefile_wd <- function() {
@@ -407,13 +411,6 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
   
   coordinates(reg_points) <- ~long + lat # move coords into SPDF slot
   proj4string(reg_points) <- CRS(NYC_CRS) # set common projection
-  
-  # # create a label that changes format for map plotting based on years selected
-  # if(length(yr) == 1) {
-  #   yrlabel <- paste(as.character(yr), " School Year", sep = "")
-  # } else {
-  #   yrlabel <- paste(min(points$year), "-", max(points$year), " School Years", sep = "")
-  # }
   
   # calc how many applications and registrations plot into nyc sds polys
   apps_over_sds <- over(app_points, nyc_sds_fixed)

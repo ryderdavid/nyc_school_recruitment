@@ -15,9 +15,9 @@ check.packages <- function(pkg){
 
 # need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
 
-packages <- c('sf', 'V8', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
-              'tmap', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'tmaptools', 'viridis', 'viridisLite', 'RSocrata', 'grid', 'gridExtra', 'rstudioapi', 'units')
+packages <- c('sf', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
+              'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
+              'viridis', 'viridisLite', 'rstudioapi')
 
 check.packages(packages)
 
@@ -395,7 +395,7 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
   p <-  palette
   
   yr <- 2017
-  p <- "YlOrBr"
+  p <- "BuGn"
   
   
   app_points <- recruitment_data_clean %>% 
@@ -431,6 +431,7 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
   total_regs_per_sd <- regs_over_sds %>% count(SchoolDist) %>% rename(regs=n)
 
   
+  
   # merge both attributes and get apps -> regs conversion rate
   conversions_per_sd <- merge(total_apps_per_sd, 
                               total_regs_per_sd, by = "SchoolDist") %>% 
@@ -438,18 +439,26 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
   
   # merge conversions with spatial data on school districts, and remove SDs
   # where no applications or registrations were plotted
-  conversions_per_sd <- conversions_per_sd %>% 
-    merge(nyc_sds_fixed, conversions_per_sd,
+  conversions_per_sd_spdf <-  merge(nyc_sds_fixed, conversions_per_sd,
           by.x = "SchoolDist", 
           by.y = "SchoolDist") %>% 
     filter(!is.na(apps) & !is.na(regs) & !is.na(rate))
   
-  conversions_per_sd
+  conversions_per_sd_long <- conversions_per_sd_spdf@data %>% gather(key="type", value="count", "apps", "regs")
+  
+  clr <- brewer.pal(5, p)[3]
   
   
-  ggplot(data = conversions_per_sd, aes(x = as.factor(SchoolDist), y = apps)) + 
-    geom_bar(stat = "identity", fill) + coord_flip()
-
+  ggplot(data = conversions_per_sd_long, 
+         mapping = aes(x = as.factor(SchoolDist), y = count, fill = type)) + 
+    geom_bar(stat = "identity") + 
+    coord_flip() + 
+    scale_fill_manual(values = c("grey75", clr)) + 
+    theme(legend.position = "bottom") + 
+    ggtitle('Applications and Registrations by School District') + 
+    theme(plot.title = element_text(hjust = 0.5)) + 
+    xlab("School District")
+  
   
   
   
