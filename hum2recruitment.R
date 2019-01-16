@@ -458,46 +458,15 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "Greys", dat
 
 
 
-###
-###
-###
-###
-###
-###
-###
-
-
-###
-### EVERYTHING ABOVE IS GOOD TO GO - FUNCTIONS BELOW ARE WIP
-
-###
-###
-###
-###
-###
-###
-###
-###
-###
-###
 
 
 
 
-
-
-
-
-  
-plot_app_vs_regs_by_yr <- function(year = seq(1950,2050), palette = "YlOrBr", data = recruitment_data_clean) {
+plot_app_to_reg_by_year <- function(year = seq(1950,2050), palette = "Set1", data = recruitment_data_clean, top.n = 10) {
   
   yr <- year
   p <-  palette
-  
-  yr <- 2017:2019
-  p <- "BuGn"
-  data = recruitment_data_clean
-  
+
   
   app_points <- data %>% 
     dplyr::select(application_id, year, long, lat, 
@@ -537,105 +506,71 @@ plot_app_vs_regs_by_yr <- function(year = seq(1950,2050), palette = "YlOrBr", da
   
   sd_stats$year <- as.factor(sd_stats$year)
   levels(sd_stats$year)
+  
+  
+  sd_stats %>% 
+    group_by(SchoolDist) %>% 
+    summarise(count = sum(count)) %>% 
+    top_n(top.n, count) %>% 
+    pull(SchoolDist) -> top_dists
 
-  top.n <- 15
-  sd_stats %>% group_by(SchoolDist) %>% summarise(count = sum(count)) %>% top_n(top.n, count) %>% pull(SchoolDist) -> top_dists
   
+  sd_stats_top <- sd_stats %>% filter(SchoolDist %in% top_dists)
   
-  sd_stats %>% filter(SchoolDist %in% top_dists) -> sd_stats_top
-  sd_stats_top
+  data <- sd_stats_top
   
-  ggplot(sd_stats_top, aes(x = str_replace(interaction(SchoolDist, registered), '\\.', ' / '), y = count, fill = as.factor(year))) +
-    geom_bar(stat = "identity") + coord_flip()
-  
-  
-  
-  
-  
-  
-
-  ggplot() + 
-    geom_bar(data = sd_stats_top, 
-             mapping = aes(x = as.factor(SchoolDist), 
-                 y = count, 
-                 fill = year, 
-                 group = registered), 
-             stat = "identity")
-  
-  sd_stats_top %>% write_delim(path = "example.csv")
+  yrlabel <- ifelse(length(yr) == 1, as.character(yr), paste(min(yr), "-", max(yr), sep = ""))
   
   # This plots color of each 
-  ggplot(sd_stats_top, aes(x = as.factor(SchoolDist), y = count)) + 
-    geom_bar(stat = "identity", fill = "grey55") + coord_flip() +
+  ggplot(data, aes(x = as.factor(SchoolDist), y = count)) + 
+    geom_bar(stat = "identity", fill = "grey70") + 
+    theme(axis.title.x = element_blank()) + 
+    coord_flip() +
     # scale_color_brewer(palette = "Greys") +
-    geom_bar(data = filter(sd_stats_top, registered == 1), 
+    geom_bar(data = filter(data, registered == 1), 
              aes(fill = year), position = position_stack(reverse = T), stat = "identity") +
-    scale_fill_brewer(palette = "YlOrBr") + 
-    ggtitle(paste(min(levels(sd_stats$year)), "-", max(levels(sd_stats$year)), sep = "")) + 
-    theme(plot.title = element_text(hjust = 0.5)) + 
-    xlab("School District") +
-    guides(fill = guide_legend(title = "Year"))
-  
-    # scale_fill_manual(values = pal)
-    # scale_fill_brewer()
-    
-    
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  # tabulate applications and registrations per school district
-  total_apps_per_sd <- apps_over_sds@data %>% count(SchoolDist, year) %>% rename(apps=n)
-  total_regs_per_sd <- regs_over_sds@data %>% count(SchoolDist, year) %>% rename(regs=n)
-  
-  
-  # merge both attributes and get apps -> regs conversion rate
-  conversions_per_sd <- merge(total_apps_per_sd, 
-                              total_regs_per_sd, by = "SchoolDist") %>% 
-    mutate(rate = regs / apps)
-  
-  # merge conversions with spatial data on school districts, and remove SDs
-  # where no applications or registrations were plotted
-  conversions_per_sd_spdf <-  merge(nyc_sds_fixed, conversions_per_sd,
-                                    by.x = "SchoolDist", 
-                                    by.y = "SchoolDist") %>% 
-    filter(!is.na(apps) & !is.na(regs) & !is.na(rate))
-  
-  conversions_per_sd_long <- conversions_per_sd_spdf@data %>% gather(key="type", value="count", "apps", "regs")
-  
-  conversions_per_sd_long
-  
-  clr <- brewer.pal(5, p)[3]
-  
-  # app_to_reg_plot <- 
-    
-  ggplot(data = conversions_per_sd_long, 
-                            mapping = aes(x = as.factor(SchoolDist), y = count, fill = type)) + 
-    geom_bar(stat = "identity") + 
-    coord_flip() + 
-    scale_fill_manual(values = c("grey75", clr)) + 
-    theme(legend.position = "bottom") + 
-    ggtitle('Applications and Registrations by School District') + 
+    scale_fill_brewer(palette = p) + 
+    theme(legend.position = "bottom",
+          legend.spacing.x = unit(0.25, 'cm'),
+          legend.title = element_blank()) + 
+    ggtitle(paste("Recruitment activity in top ", top.n, " recruiting school districts, ", yrlabel, 
+                  "\n(total applications for all years shown in grey)", sep = "")) + 
     theme(plot.title = element_text(hjust = 0.5)) + 
     xlab("School District")
   
-  return(app_to_reg_plot)
-  
 }  
-  
+
+
+
+
+
+
+###
+###
+###
+###
+###
+###
+###
+
+
+###
+### EVERYTHING ABOVE IS GOOD TO GO - FUNCTIONS BELOW ARE WIP
+
+###
+###
+###
+###
+###
+###
+###
+###
+###
+###
+
+
+
+
 
 
 
@@ -710,3 +645,7 @@ tmap_arrange(plot_sd_chloropleth(year = 2017, regonly = T),
 plot_conversions_by_sd(year = 2017:2018)
 plot_conversions_by_sd(2017, palette = "YlOrBr")
 plot_conversions_by_sd(2018, palette = "BuGn")
+
+
+
+plot_app_to_reg_by_year(year = 2017:2018, palette="Set1", top.n = 10)
