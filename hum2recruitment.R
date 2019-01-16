@@ -558,16 +558,20 @@ plot_app_vs_regs_by_yr <- function(year = seq(1950,2050), palette = "YlOrBr", da
     geom_bar(data = sd_stats_top, 
              mapping = aes(x = as.factor(SchoolDist), 
                  y = count, 
-                 fill = interaction(as.factor(year), as.factor(registered)), 
+                 fill = year, 
                  group = registered), 
              stat = "identity")
-    
   
+  sd_stats_top %>% write_delim(path = "example.csv")
+  
+  # This plots color of each 
   ggplot(sd_stats_top, aes(x = as.factor(SchoolDist), y = count)) + 
     geom_bar(stat = "identity", fill = "grey55") + coord_flip() +
+    # scale_color_brewer(palette = "Greys") +
     geom_bar(data = filter(sd_stats_top, registered == 1), 
-             aes(fill = as.factor(year)), stat = "identity") +
-    ggtitle(paste(min(sd_stats$year), "-", max(sd_stats$year), sep = "")) + 
+             aes(fill = year), position = position_stack(reverse = T), stat = "identity") +
+    scale_fill_brewer(palette = "YlOrBr") + 
+    ggtitle(paste(min(levels(sd_stats$year)), "-", max(levels(sd_stats$year)), sep = "")) + 
     theme(plot.title = element_text(hjust = 0.5)) + 
     xlab("School District") +
     guides(fill = guide_legend(title = "Year"))
@@ -616,7 +620,9 @@ plot_app_vs_regs_by_yr <- function(year = seq(1950,2050), palette = "YlOrBr", da
   
   clr <- brewer.pal(5, p)[3]
   
-  app_to_reg_plot <- ggplot(data = conversions_per_sd_long, 
+  # app_to_reg_plot <- 
+    
+  ggplot(data = conversions_per_sd_long, 
                             mapping = aes(x = as.factor(SchoolDist), y = count, fill = type)) + 
     geom_bar(stat = "identity") + 
     coord_flip() + 
