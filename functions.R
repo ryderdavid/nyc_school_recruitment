@@ -45,9 +45,7 @@ check.packages(packages)
 # # https://stackoverflow.com/questions/34344454/plot-2-tmap-objects-side-by-side
 # library(grid)
 
-
-
-
+source("datasets.R")
 
 set_sourcefile_wd <- function() {
   library(rstudioapi) # 
@@ -57,165 +55,24 @@ set_sourcefile_wd <- function() {
 }
 
 set_sourcefile_wd()
-setwd("data")
 
-
-
-download.file("https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-data/nysd_18d.zip", destfile = "nysd_18d.zip")
-unzip("nysd_18d.zip", overwrite = T)
-
-# Read in the data from each sheet
-sheet_1 <- read_xlsx("historical_recruitment_data_1.xlsx", sheet = 1)
-sheet_2 <- read_xlsx("historical_recruitment_data_1.xlsx", sheet = 2)
-sheet_3 <- read_xlsx("historical_recruitment_data_1.xlsx", sheet = 3)
-
-
-# The below three commands clean and standardize the colnames for each sheet's
-# vars
-str_to_lower(str_replace_all(names(sheet_1), 
-                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
-  str_replace_all("[:punct:]+", "_") %>% 
-  str_replace_all("^[:punct:]|[:punct:]$", "") -> names(sheet_1)
-
-str_to_lower(str_replace_all(names(sheet_2), 
-                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
-  str_replace_all("[:punct:]+", "_") %>% 
-  str_replace_all("^[:punct:]|[:punct:]$", "") -> names(sheet_2)
-
-str_to_lower(str_replace_all(names(sheet_3), 
-                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
-  str_replace_all("[:punct:]+", "_") %>% 
-  str_replace_all("^[:punct:]|[:punct:]$", "") -> names(sheet_3)
-
-
-# Select just the cols we need - location and application pd. Also commonly
-# format zip codes (sheet two was numeric, sheets 1 and 3 were strings with
-# trailing nonsignificant 0)
-sheet_1 %>% mutate(studentaddress_zip =
-                     str_sub(as.character(studentaddress_zip),
-                             1, 5)) -> sheet_1_trimmed
-
-sheet_2 %>% mutate(studentaddress_zip = 
-                     str_sub(as.character(studentaddress_zip),
-                             1, 5)) -> sheet_2_trimmed
-
-sheet_3 %>% mutate(studentaddress_zip =
-                     str_sub(as.character(studentaddress_zip),
-                             1, 5)) -> sheet_3_trimmed
-
-# Combine the three sheets
-bind_rows(sheet_1_trimmed, 
-          sheet_2_trimmed, 
-          sheet_3_trimmed) -> recruitment_data_man_bx_merged
-
-
-# Strip extraneous year from enrollment period and rename to "year", rename
-# studentaddress_zip to zip, then cast year as numeric
-recruitment_data_clean <- recruitment_data_man_bx_merged %>% 
-  mutate(enrollment_period = str_sub(enrollment_period, 1, 4)) %>% 
-  rename(year = enrollment_period, zip = studentaddress_zip) %>% 
-  mutate(year = as.numeric(year)) %>% 
-  filter(!is.na(studentaddress_coordinates)) %>% # to remove one pesky record in 2018...
-  separate(studentaddress_coordinates, c("lat", "long"), sep = ",") %>% 
-  mutate(long = as.numeric(long), lat = as.numeric(lat))
-
-# One hand fix to correct a typo in data entry -- the above filter also gets rid
-recruitment_data_clean[recruitment_data_clean$zip == "1.047", "zip"] <- "10473"
-
-# get recruitment data clean into a spatial data frame
-# need to refactor code to reference this SPDF rather than the DF?
-recruitment_data_spdf <- recruitment_data_clean
-coordinates(recruitment_data_spdf) <- ~long + lat
-recruitment_data_spdf
-
-
-# Summarize applications by zip and trim out non manhattan-bronx applications
-man_bx_apps_by_zip <- recruitment_data_clean %>% 
-  count(zip) %>% 
-  filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
-
-
-# recruitment data for manhattan and bx only
-recruitment_data_man_bx <- recruitment_data_clean %>% 
-  filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
-
-
-
-options(tigris_use_cache = T)
-
-# Download shapefiles for NYC area ZCTAs to render as background layer
-nyc_area_zips <- zctas(cb = T, starts_with = c('070','076','073','100','101',
-                                               '102','103','104','105','106',
-                                               '107','108','109','110','111',
-                                               '112','113','114'))
-
-##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
-# CRS to transform projeections of any other layer being used when necessary
-NYC_CRS <- proj4string(nyc_area_zips)
-
-# Collect just the ZCTAs we're interested in - Man/Bx
-man_bx_zips <- zctas(state = "NY", cb = T, 
-                     starts_with = c("100", "101", "102", "104"))
-
-
-# Merge shapefile with application data tabulation of zip codes, removing from
-# shapefile any ZCTA polygon with "NA" -- AKA 0 applications
-man_bx_merge <- merge(man_bx_zips, 
-                      man_bx_apps_by_zip, 
-                      by.x = "GEOID10", 
-                      by.y = "zip") %>% filter(!is.na(n))
-
-
-
-# Create a single point shapefile for Samuel Gompers HS
-sam_gompers_hs <- data.frame(name = "Samuel Gompers HS", lat = 40.811227, long = -73.907361)
-coordinates(sam_gompers_hs) <- ~long + lat
-projection(sam_gompers_hs) = as.character(proj4string(man_bx_merge)) # update this to method used elsewhere
-# dir.create("sghs_coords")
-# shapefile(sam_gompers_hs, "sghs_coords/sghs_coords.shp")
-
-
-
-## Create a "fixed" shapefile of NYC School Districts
-# Download School District Shapefile from:
-# https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-data/nysd_18d.zip
-nyc_sds <- readOGR(dsn = "nysd_18d", layer = "nysd") 
-nyc_sds <- spTransform(nyc_sds, CRS(NYC_CRS)) # set NYC SD proj to common proj
-
-# Perform a little surgery on NYC School District 10. SD10 is mostly in the
-# Bronx, but a tiny bit of it (Marble Hill) is in Manhattan but on the Bronx
-# side of the river. The shapefile divides SD into manhattan and bx sides, this
-# script merges those into a borough-agnostic polygon. 
-
-# isolate sd10's data, sum the area, drop the length. Note this will add
-# problematic border length data on SD10, since we're erasing internal
-# perimeter. Don't use the length. 
-sd10_data <- nyc_sds@data %>% filter(SchoolDist == 10) %>%
-  summarise_at(c("Shape_Area", "Shape_Leng"), sum) %>% 
-  mutate(SchoolDist = as.integer(10))
-
-# aggregate both polygons for SD10 into a single poly.
-sd10_one_poly <- nyc_sds %>% filter(SchoolDist == 10) %>% aggregate()
-
-# combine the above polygons and data into a single SPDF
-sd10_spdf <- SpatialPolygonsDataFrame(sd10_one_poly, sd10_data)
-
-# bind together shapefile of polys other than SD10 with the new merged SD10 SPDF
-nyc_sds_fixed <- bind(sd10_spdf, filter(nyc_sds, SchoolDist != 10))
-
-
-
-# Plot all three years' (2017 - 19) application data
-tmap_mode('plot')
 
 ## MAN_BX BACKGROUND MAP AS FUNCTION EVERY TIME
+tmap_nyc_background <- function() {
+  return(
+    tm_shape(nyc_area_zips,
+             xlim = c(-74.259104, -73.687704),
+             ylim = c(40.490671, 40.924773)) + tm_fill(col = "grey90")
+  )
+}
+
 tmap_man_bx_background <- function() {
   return(
     tm_shape(nyc_area_zips, 
-             ylim = c(40.681061, 40.930),
-             xlim = c(-74.041447, -73.78)) +
+             ylim = c(40.66, 40.92),
+             xlim = c(-74.03, -73.76)) +
       tm_fill(col = "grey90")
-    )
+  )
 }
 
 tmap_man_bx_zoom <- function() {
@@ -228,23 +85,8 @@ tmap_man_bx_zoom <- function() {
 }
 
 
-
-
-#####
-#####
-#####
-#####
-#####
-#####
-
-
-
-
-
-
-
 # Turned plotting by registration year into a function
-plot_reg_by_year <- function(yr, rec_data = recruitment_data_clean, p = "Oranges") {
+plot_reg_by_year <- function(yr, rec_data = recruitment_data, p = "Oranges") {
   
   reg.by.zip <- rec_data %>% 
     dplyr::select(application_id, zip, lat, long, year, registration_completed_date) %>% 
@@ -301,7 +143,7 @@ plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regon
   p <-  palette
   regonly <- regonly
   
-  points <- recruitment_data_clean %>% 
+  points <- recruitment_data %>% 
     dplyr::select(application_id, year, long, lat, 
                   registration_completed_date, submission_date, year) %>% 
     mutate(registered = ifelse(!is.na(registration_completed_date), 1, 0)) %>% 
@@ -373,14 +215,14 @@ plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regon
 ### Question: where are candidate students best converting from applications to registrations?
 ### note: http://www.guru-gis.net/count-points-in-polygons/
 
-plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "Greys", data = recruitment_data_clean) {
+plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "Greys", data = recruitment_data) {
   
   yr <- year
   p <-  palette
   # 
   # yr <- 2019
   # p <- "BuGn"
-  # data = recruitment_data_clean
+  # data = recruitment_data
   
   
   app_points <- data %>% 
@@ -460,7 +302,7 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "Greys", dat
 
 
 
-plot_app_to_reg_by_year <- function(year = seq(1950,2050), palette = "Set1", data = recruitment_data_clean, top.n = 10) {
+plot_app_to_reg_by_year <- function(year = seq(1950,2050), palette = "Set1", data = recruitment_data, top.n = 10) {
   
   yr <- year
   p <-  palette
@@ -537,84 +379,6 @@ plot_app_to_reg_by_year <- function(year = seq(1950,2050), palette = "Set1", dat
     xlab("School District")
   
 }  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-###
-###
-###
-###
-###
-###
-###
-
-
-###
-### EVERYTHING ABOVE IS GOOD TO GO - FUNCTIONS BELOW ARE WIP
-
-###
-###
-###
-###
-###
-###
-###
-###
-###
-###
-
-
-
-
-
-
-
-
-
-###
-###
-###
-###
-###
-###
-###
-###
-###
-### BEGIN SECTION TO PLOT DESIRED VISUALIZATIONS BY CALLED FUNCTIONS
-###
-###
-###
-###
-###
-###
-###
-###
-###
 
 
 
