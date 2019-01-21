@@ -34,13 +34,13 @@ plot_reg_by_year(2019)
 
 
 # plot applications and registrations by school district
-tmap_arrange(plot_sd_chloropleth(year = 2017), 
-             plot_sd_chloropleth(year = 2018, palette = "BuGn"), 
-             plot_sd_chloropleth(year = 2019, palette = "Reds"), 
+tmap_arrange(plot_sd_choropleth(year = 2017), 
+             plot_sd_choropleth(year = 2018, palette = "BuGn"), 
+             plot_sd_choropleth(year = 2019, palette = "Reds"), 
              nrow = 1, ncol = 3, asp = .85)
 
-tmap_arrange(plot_sd_chloropleth(year = 2017, regonly = T), 
-             plot_sd_chloropleth(year = 2018, palette = "BuGn", regonly = T), 
+tmap_arrange(plot_sd_choropleth(year = 2017, regonly = T), 
+             plot_sd_choropleth(year = 2018, palette = "BuGn", regonly = T), 
              nrow = 1, ncol = 2, asp = NA)
 
 

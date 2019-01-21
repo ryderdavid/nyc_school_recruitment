@@ -137,11 +137,16 @@ plot_reg_by_year <- function(yr, rec_data = recruitment_data, p = "Oranges") {
 ### Question: which school district are most applications coming from?
 ### note: http://www.guru-gis.net/count-points-in-polygons/
 
-plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regonly = F) {
+plot_sd_choropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regonly = F) {
   
   yr <- year
   p <-  palette
   regonly <- regonly
+  
+  # Controls here for bugtesting within the function
+  # yr <- 2018
+  # p <- "Greens"
+  # regonly <- T
   
   points <- recruitment_data %>% 
     dplyr::select(application_id, year, long, lat, 
@@ -160,7 +165,6 @@ plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regon
     points <- points %>% filter(registered == 1)
   }
   
-  
   # create a label that changes format for map plotting based on years selected
   if(length(yr) == 1) {
     yrlabel <- paste(as.character(yr), " School Year", sep = "")
@@ -169,24 +173,25 @@ plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regon
   }
   
   # requires nyc sds fixed, check how many points plot into nyc sds polys
-  res <- over(points, nyc_sds_fixed)
+  res <- over(points, nyc_sds)
   
   # tabulate points per school district
   points_per_sd <- as.tibble(table(res$SchoolDist)) %>% 
     rename(SchoolDist = Var1) %>% 
     mutate(SchoolDist = as.integer(SchoolDist))
   
-  
   # to the SPDF of school districts, add the number of points taking place
   # in each SD
-  points_per_sd_spdf <- merge(nyc_sds_fixed, points_per_sd,
+  points_per_sd_spdf <- merge(nyc_sds, points_per_sd,
                                     by.x = "SchoolDist", by.y = "SchoolDist")
   
   
   # create a pretty label variable combining SD number and number of applications
-  points_per_sd_spdf <- points_per_sd_spdf %>% 
+  points_per_sd_spdf %<>% 
     mutate(label = paste("SD", as.character(SchoolDist), ":\n", 
-                         as.character(n), sep = ""))
+                         as.character(n), sep = "")) %>% filter(!is.na(n))
+  
+  points_per_sd_spdf
   
   # applications or registrations changes title and legend name
   if(regonly == T) {
@@ -203,9 +208,10 @@ plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regon
   tmap_man_bx_zoom() +
     tm_shape(points_per_sd_spdf) +
     tm_borders(alpha = 0.3, lw = 1.5) + 
-    tm_fill(col = "n", title = ar, colorNA = NULL, palette = p) + 
+    tm_fill(col = "n", title = ar, colorNA = NULL, palette = p,
+            showNA = F) + 
     tm_text(text = "label", fontface = "bold", style = "pretty", 
-            size = "n", legend.size.show = F, shadow = TRUE) + 
+            showNA = F) + 
     tm_layout(main.title = paste(ar_title, "per school district,", "\n", yrlabel), 
               main.title.position = ("center"), fontface = "bold", legend.position = c("left", "top"))
   
@@ -252,8 +258,8 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "Greys", dat
   # have trimmed the plot to (say if someone has applied from Jersey or out of
   # state), so after checking which poly each point plots over, I filter out any
   # that have NAs (aka where they are outside the scope of the query.)
-  apps_over_sds <- over(app_points, nyc_sds_fixed) %>% filter_all(any_vars(!is.na(.)))
-  regs_over_sds <- over(reg_points, nyc_sds_fixed) %>% filter_all(any_vars(!is.na(.)))
+  apps_over_sds <- over(app_points, nyc_sds) %>% filter_all(any_vars(!is.na(.)))
+  regs_over_sds <- over(reg_points, nyc_sds) %>% filter_all(any_vars(!is.na(.)))
   
   
   # tabulate applications and registrations per school district
@@ -268,7 +274,7 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "Greys", dat
   
   # merge conversions with spatial data on school districts, and remove SDs
   # where no applications or registrations were plotted
-  conversions_per_sd_spdf <-  merge(nyc_sds_fixed, conversions_per_sd,
+  conversions_per_sd_spdf <-  merge(nyc_sds, conversions_per_sd,
                                     by.x = "SchoolDist", 
                                     by.y = "SchoolDist") %>% 
     filter(!is.na(applications) & !is.na(registrations) & !is.na(rate))
@@ -338,8 +344,8 @@ plot_app_to_reg_by_year <- function(year = seq(1950,2050), palette = "Set1", dat
   # that have NAs (aka where they are outside the scope of the query.)
   #
   # NOTE: THIS IS WIP FUNCTION - I STILL DON'T HAVE IT DOING WHAT I WANT IT TO. 
-  apps_over_sds <- intersect(app_points, nyc_sds_fixed) %>% filter_all(any_vars(!is.na(.)))
-  regs_over_sds <- intersect(reg_points, nyc_sds_fixed) %>% filter_all(any_vars(!is.na(.)))
+  apps_over_sds <- intersect(app_points, nyc_sds) %>% filter_all(any_vars(!is.na(.)))
+  regs_over_sds <- intersect(reg_points, nyc_sds) %>% filter_all(any_vars(!is.na(.)))
   
   apps_over_sds@data %>% group_by(SchoolDist, registered, year) %>% 
     summarise(count = n()) -> sd_stats

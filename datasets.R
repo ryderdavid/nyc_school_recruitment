@@ -9,7 +9,7 @@ check.packages <- function(pkg){
 
 packages <- c('sf', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'viridis', 'viridisLite', 'rstudioapi', 'raster')
+              'viridis', 'viridisLite', 'rstudioapi', 'raster', 'magrittr')
 
 check.packages(packages)
 
@@ -24,7 +24,12 @@ set_sourcefile_wd()
 setwd("data")
 
 
+# API KEYS NEEDED FOR DATA:
+# Save keys as plaintext files in /api_keys/ -- ignored by git
 
+# ACS - American Communities Survey US Census - Census Key
+census_key <- read_file("../api_keys/census_key") %>% trim() %>% 
+  census_api_key(., install = T)
 
 
 
@@ -97,12 +102,23 @@ recruitment_data %<>%
 # One hand fix to correct a typo in data entry
 recruitment_data[recruitment_data$zip == "1.047", "zip"] <- "10473"
 
-recruitment_data 
 
 # recruitment data for manhattan and bx only
 recruitment_data_man_bx <- recruitment_data %>% 
   filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
 
+
+# create SPDF of application points
+application_points_spdf <- recruitment_data
+coordinates(application_points_spdf) <- ~long + lat # move coords into SPDF slot
+proj4string(application_points_spdf) <- CRS(NYC_CRS) # set common projection
+
+
+# Filter Application points for just registration points
+registration_points_spdf <- application_points_spdf %>% 
+  mutate(registered = ifelse(!is.na(registration_completed_date), T, F)) %>% 
+  dplyr::select(-registration_completed_date) %>% filter(registered == T) %>% 
+  dplyr::select(-registered)
 
 
 
@@ -154,9 +170,75 @@ sd10_one_poly <- nyc_sds %>% filter(SchoolDist == 10) %>% aggregate()
 sd10_spdf <- SpatialPolygonsDataFrame(sd10_one_poly, sd10_data)
 
 # bind together shapefile of polys other than SD10 with the new merged SD10 SPDF
-nyc_sds_fixed <- bind(sd10_spdf, filter(nyc_sds, SchoolDist != 10))
+nyc_sds <- bind(sd10_spdf, filter(nyc_sds, SchoolDist != 10))
+
+rm(list = c("sd10_spdf", "sd10_one_poly", "sd10_data"))
 
 
 
 
 
+districts_demo_snapshot <- read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv")
+
+
+schools_demo_snapshot <- 
+  read_csv("https://data.cityofnewyork.us/api/views/s52a-8aq6/rows.csv?accessType=DOWNLOAD&bom=true&format=true")
+
+names(schools_demo_snapshot) %<>% 
+  str_to_lower() %>% 
+  str_replace_all("\\s", "_") %>% 
+  str_replace_all("#", "num") %>% 
+  str_replace_all("%", "pct") %>% 
+  str_replace_all("\\(|\\)", "") %>% 
+  str_replace_all("\\&", "") %>% 
+  str_replace_all("_{2,}", "_")
+
+schools_demo_snapshot <- schools_demo_snapshot %>% 
+  rename(num_swd = num_students_with_disabilities, pct_swd = pct_students_with_disabilities,
+         num_ell = num_english_language_learners, pct_ell = pct_english_language_learners,
+         num_pov = num_poverty, pct_pov = pct_poverty)
+
+
+# Shapefile of public school points - This is an ESRI shape file of school point
+# locations based on the official address.  It includes some additional basic
+# and pertinent information needed to link to other data sources. It also
+# includes some basic school information such as Name, Address, Principal, and
+# Principal’s contact information.
+
+download.file(url = "https://data.cityofnewyork.us/download/jfju-ynrr/application%2Fzip", destfile = "school_points.zip")
+unzip("school_points.zip", exdir = "school_points", overwrite = T)
+
+school_points <- readOGR(dsn = "school_points", layer = "Public_Schools_Points_2011-2012A")
+
+names(school_points) %<>% 
+  str_to_lower()
+
+# clean up trailing whitespace in ats_code
+school_points$ats_code %<>% str_trim()
+
+school_points <- spTransform(school_points, CRS(NYC_CRS))
+
+
+
+
+
+
+
+# Get census tract shapefiles
+
+nyc_tracts <- tidycensus::get_acs(state = "NY",
+                                  variables = "B01003_001",
+                                  county = c("New York", "Bronx", "Kings", "Queens", "Richmond"), 
+                                  geography = "tract",
+                                  geometry = T)
+
+
+
+# replace this with a filter once I figure out how to work sf files
+man_bx_tracts <- tidycensus::get_acs(state = "NY",
+                                     variables = "B01003_001",
+                                     county = c("New York", "Bronx"), 
+                                     geography = "tract", 
+                                     geometry = T)
+
+man_bx_tracts_spdf <- as(st_geometry(man_bx_tracts), "Spatial")
