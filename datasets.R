@@ -20,7 +20,13 @@ set_sourcefile_wd <- function() {
   print( getwd() )
 }
 
+
 set_sourcefile_wd()
+if(!dir.exists("data")) {
+  
+  dir.create("data")
+  
+}
 setwd("data")
 
 
@@ -28,9 +34,16 @@ setwd("data")
 # Save keys as plaintext files in /api_keys/ -- ignored by git
 
 # ACS - American Communities Survey US Census - Census Key
-census_key <- read_file("../api_keys/census_key") %>% trim() %>% 
-  census_api_key(., install = T)
+# census_key <- read_file("../api_keys/census_key") %>% trim() %>% 
+#   census_api_key(., install = T)
 
+
+if(Sys.getenv("CENSUS_API_KEY") == "") {
+  
+  census_api_key(getPass("Enter U.S. census API key to install: "), install = T, overwrite = T)
+  readRenviron("~/.Renviron")
+  
+}
 
 
 # HUM II RECRUITMENT DATA ------------------------------------------------------
@@ -108,6 +121,20 @@ recruitment_data_man_bx <- recruitment_data %>%
   filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
 
 
+options(tigris_use_cache = T)
+
+# Download shapefiles for NYC area ZCTAs to render as background layer
+nyc_area_zips <- zctas(cb = T, starts_with = c('070','071','072','073','074',
+                                               '075','076','100','101','102',
+                                               '103','104','105','106','107',
+                                               '108','109','110','111','112',
+                                               '113','114','115','116'))
+
+##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
+# CRS to transform projeections of any other layer being used when necessary
+NYC_CRS <- proj4string(nyc_area_zips)
+
+
 # create SPDF of application points
 application_points_spdf <- recruitment_data
 coordinates(application_points_spdf) <- ~long + lat # move coords into SPDF slot
@@ -122,18 +149,9 @@ registration_points_spdf <- application_points_spdf %>%
 
 
 
-options(tigris_use_cache = T)
 
-# Download shapefiles for NYC area ZCTAs to render as background layer
-nyc_area_zips <- zctas(cb = T, starts_with = c('070','071','072','073','074',
-                                               '075','076','100','101','102',
-                                               '103','104','105','106','107',
-                                               '108','109','110','111','112',
-                                               '113','114','115','116'))
 
-##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
-# CRS to transform projeections of any other layer being used when necessary
-NYC_CRS <- proj4string(nyc_area_zips)
+
 
 # FIlter just the ZCTAs we're interested in - Man/Bx
 man_bx_zips <- nyc_area_zips %>% filter(str_detect(GEOID10, "^100|^101|^102|^103|^104"))

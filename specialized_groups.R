@@ -5,11 +5,11 @@ check.packages <- function(pkg){
   sapply(pkg, require, character.only = TRUE)
 }
 
-# need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
+# To build on linux, need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
 
 packages <- c('sf', 'devtools', 'acs', 'tidycensus', 'tigris', 'sp', 
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'viridis', 'viridisLite', 'rstudioapi', 'tidyverse')
+              'viridis', 'viridisLite', 'rstudioapi', 'tidyverse', 'getPass')
 
 check.packages(packages)
 

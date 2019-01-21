@@ -21,29 +21,7 @@ packages <- c('sf', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp'
 
 check.packages(packages)
 
-# 
-# library(rJava)
-# library(devtools)
-# library(acs)
-# library(tidycensus)
-# library(tidyverse)
-# library(tigris)
-# library(sp)
-# library(tmap)
-# library(readxl)
-# library(ggplot2)
-# library(rgdal)
-# library(spdplyr)
-# library(RColorBrewer)
-# library(viridis)
-# library(viridisLite)
-# library(tmaptools)
-# library(RSocrata)
-# library(grid)
-# library(gridExtra)
-# # to create grid side by side layouts of tmap plots per
-# # https://stackoverflow.com/questions/34344454/plot-2-tmap-objects-side-by-side
-# library(grid)
+
 
 source("datasets.R")
 
