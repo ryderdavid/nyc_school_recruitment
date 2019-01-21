@@ -42,7 +42,7 @@ tmap_arrange(plot_sd_choropleth(year = 2017),
              nrow = 1, ncol = 3, asp = .85)
 
 tmap_arrange(plot_sd_choropleth(year = 2017, regonly = T), 
-             plot_sd_choropleth(year = 2018, palette = "BuGn", regonly = T), 
+             plot_sd_choropleth(year = 2018, palette = "BuGn", regonly = T),
              nrow = 1, ncol = 2, asp = NA)
 
 
@@ -67,13 +67,17 @@ plot_app_to_reg_by_year(year = 2017:2018, palette="Set1", top.n = 10)
 sd_demo_snap_18 <- districts_demo_snapshot %>% filter(year == "2017-18")
 
 sd_demo_snap_18_spatial <- merge(nyc_sds, sd_demo_snap_18, 
-                                 by.x = "SchoolDist", by.y = "administrative_district") %>% 
+                                 by.x = "SchoolDist", 
+                                 by.y = "administrative_district") %>% 
   mutate(total_enrollment = as.numeric(total_enrollment))
 
-sd_demo_snap_18_spatial <- sd_demo_snap_18_spatial %>% mutate(name_label = paste("SD", SchoolDist, sep = ""))
-
+names(sd_demo_snap_18_spatial)
 
 tmap_mode("plot")
+
+sd_demo_snap_18_spatial <- sd_demo_snap_18_spatial %>% 
+  mutate(name_label = paste("SD", SchoolDist, pct_ell, sep = ""))
+
 tmap_nyc_background() +
   tm_shape(sd_demo_snap_18_spatial) + tm_borders() +
   tm_fill(col = "english_language_learners_2", title = "% ELL",
@@ -131,17 +135,6 @@ sch_dem_snp_spdf <- merge(sch_pts, sch_dem_snp,
                 num_swd, pct_swd)
 
 
-
-
-# function outliers(x) {
-#   
-#   q1 <- fivenum(x)$2
-#   q3 <- fivenum(x)$4
-#   iqr <- IQR(x)
-#   
-#   return()
-#   
-# }
 mean(sch_dem_snp_spdf$pct_swd)
 mean(sch_dem_snp_spdf$pct_ell)
 

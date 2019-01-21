@@ -196,7 +196,19 @@ rm(list = c("sd10_spdf", "sd10_one_poly", "sd10_data"))
 
 
 
-districts_demo_snapshot <- read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv")
+districts_demo_snapshot <- 
+  read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv")
+
+names(districts_demo_snapshot) %<>% 
+  str_to_lower() %>% 
+  str_replace_all("\\s", "_") %>% 
+  str_replace_all("#", "num") %>% 
+  str_replace_all("%", "pct") %>% 
+  str_replace_all("\\(|\\)", "") %>% 
+  str_replace_all("\\&", "") %>% 
+  str_replace_all("_{2,}", "_")
+
+districts_demo_snapshot
 
 
 schools_demo_snapshot <- 
