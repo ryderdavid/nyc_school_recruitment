@@ -71,7 +71,7 @@ sd_demo_snap_18_spatial <- merge(nyc_sds, sd_demo_snap_18,
                                  by.y = "administrative_district") %>% 
   mutate(total_enrollment = as.numeric(total_enrollment))
 
-names(sd_demo_snap_18_spatial)
+
 
 tmap_mode("plot")
 
@@ -109,59 +109,69 @@ tmap_man_bx_background() +
 
 
 
+###### CURRENTLY WORKING ON: 
 
-# plot NY High Schools by % of ELL enrollment
+sch_dem_snp <- schools_demo_snapshot %>% filter(year == "2017-18") %>%
+  dplyr::select(dbn, school_name, year, total_enrollment, num_ell, 
+                pct_ell, num_pov, pct_pov, num_swd, pct_swd)
 
-# schools_demo_18 <- schools_demo_snapshot %>% filter(year == "2017-18")
-# schools_demo_18
-
-
-
-sch_dem_snp <- schools_demo_snapshot %>% filter(year == "2017-18") %>% 
-  # filter_at(vars(grade_9, grade_10, grade_11, grade_12), all_vars(. > 0)) %>% # all school years
-  dplyr::select(dbn, school_name, year, total_enrollment, num_ell, pct_ell, num_pov, pct_pov, num_swd, pct_swd)
+sch_dem_snp <- inner_join(school_points, sch_dem_snp, by=c("ats_code" = "dbn"))
 
 
-# Filtering on just high schools - but maybe we want younger to tie closer to 
-# sch_pts <- school_points %>% 
-#   filter(sch_type == "High school")
+avg_swd <- mean(sch_dem_snp$pct_swd)
+avg_ell <- mean(sch_dem_snp$pct_ell)
+
+# filter schools spdf for schools in 90th or greater percentile of % ELL
+# enrollment
+schools_with_high_ell <- sch_dem_snp %>% filter(pct_ell > quantile(pct_ell, .9))
+
+tmap_man_bx_background() + tm_shape(schools_with_high_ell) + tm_dots(size = "pct_ell")
+
+st_join(schools_with_high_ell, nyc_tracts, join = st_intersects) -> test_1
+
+test_1
+
+tmap_man_bx_background() + tm_shape(test_1) + tm_borders() + tm_fill(col = "red")
 
 
-sch_dem_snp_spdf <- merge(sch_pts, sch_dem_snp, 
-      by.x = "ats_code", by.y = "dbn", all.x = F) %>% 
-  dplyr::select(ats_code, school_name, 
-                num_ell, pct_ell,
-                num_pov, pct_pov,
-                num_swd, pct_swd)
 
 
-mean(sch_dem_snp_spdf$pct_swd)
-mean(sch_dem_snp_spdf$pct_ell)
 
+
+
+
+
+
+
+
+
+
+
+
+
+raster::intersect(nyc_sds, )
+
+
+
+
+
+
+
+
+
+# plot all schools in the 90th+ percentile for ELL enrollment
 tmap_man_bx_zoom() +
   tm_shape(nyc_sds) + tm_borders() +
-  tm_shape(sch_dem_snp_spdf %>% 
-             filter(pct_swd > mean(sch_dem_snp_spdf$pct_swd))) + 
-  tm_symbols(col = "red", size = "pct_swd")
+  tm_shape(nyc_area_zips) + tm_borders(alpha = 0.2) +
+  tm_shape(sch_dem_snp %>% filter(pct_ell > quantile(sch_dem_snp$pct_ell, 0.9))) + 
+  tm_symbols(col = "red", size = 0.1)
 
-tmap_mode("plot")
-tmap_man_bx_zoom() +
-  tm_shape(man_bx_tracts) + tm_borders(alpha = 0.2) + 
-  tm_shape(nyc_sds) + tm_borders() +
-  tm_shape(sch_dem_snp_spdf %>% 
-             filter(pct_ell > mean(sch_dem_snp_spdf$pct_ell))) + 
-  tm_symbols(col = "orange", size = "pct_ell")
-
-
-
-
-
-nyc_above_avg_ell_spdf <- filter(sch_dem_snp_spdf, pct_ell > mean(sch_dem_snp_spdf$pct_ell)) %>% 
-  dplyr::select(ats_code, school_name, num_ell, pct_ell)
 
 
 
  
+filter(sch_dem_snp, pct_ell > quantile(sch_dem_snp$pct_ell, .9)) %>% nrow
+
 
 
 

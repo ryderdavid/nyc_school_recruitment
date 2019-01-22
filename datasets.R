@@ -7,9 +7,9 @@ check.packages <- function(pkg){
 
 # need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
 
-packages <- c('sf', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
+packages <- c('sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'viridis', 'viridisLite', 'rstudioapi', 'raster', 'magrittr')
+              'viridis', 'viridisLite', 'rstudioapi', 'magrittr')
 
 check.packages(packages)
 
@@ -124,34 +124,35 @@ recruitment_data_man_bx <- recruitment_data %>%
 options(tigris_use_cache = T)
 
 # Download shapefiles for NYC area ZCTAs to render as background layer
-nyc_area_zips <- zctas(cb = T, starts_with = c('070','071','072','073','074',
-                                               '075','076','100','101','102',
-                                               '103','104','105','106','107',
-                                               '108','109','110','111','112',
-                                               '113','114','115','116'))
+nyc_area_zips <- 
+  zctas(cb = T, starts_with = c('070','071','072','073','074',
+                                '075','076','100','101','102',
+                                '103','104','105','106','107',
+                                '108','109','110','111','112',
+                                '113','114','115','116')) %>% as("sf")
+
+
 
 ##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
 # CRS to transform projeections of any other layer being used when necessary
-NYC_CRS <- proj4string(nyc_area_zips)
+# NYC_CRS <- proj4string(nyc_area_zips)
+NYC_CRS <- st_crs(nyc_area_zips)
 
 
 # create SPDF of application points
-application_points_spdf <- recruitment_data
-coordinates(application_points_spdf) <- ~long + lat # move coords into SPDF slot
-proj4string(application_points_spdf) <- CRS(NYC_CRS) # set common projection
+# application_points_spdf <- recruitment_data
+# coordinates(application_points_spdf) <- ~long + lat # move coords into SPDF slot
+# proj4string(application_points_spdf) <- CRS(NYC_CRS) # set common projection
 
+# SF of application points
+application_points <- st_as_sf(recruitment_data, coords = c("long", "lat"), crs = NYC_CRS) %>% 
+  mutate(registered = ifelse(!is.na(registration_completed_date), T, F))
 
-# Filter Application points for just registration points
-registration_points_spdf <- application_points_spdf %>% 
-  mutate(registered = ifelse(!is.na(registration_completed_date), T, F)) %>% 
+# SF of registration points - just those that filtered as registered
+registration_points <- application_points %>% 
   dplyr::select(-registration_completed_date) %>% filter(registered == T) %>% 
   dplyr::select(-registered)
-
-
-
-
-
-
+  
 
 # FIlter just the ZCTAs we're interested in - Man/Bx
 man_bx_zips <- nyc_area_zips %>% filter(str_detect(GEOID10, "^100|^101|^102|^103|^104"))
@@ -166,8 +167,12 @@ download.file("https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-
   destfile = "nysd_18d.zip")
 unzip("nysd_18d.zip", overwrite = T)
 
-nyc_sds <- readOGR(dsn = "nysd_18d", layer = "nysd") 
-nyc_sds <- spTransform(nyc_sds, CRS(NYC_CRS)) # set NYC SD proj to common proj
+# nyc_sds <- readOGR(dsn = "nysd_18d", layer = "nysd") 
+# nyc_sds <- spTransform(nyc_sds, CRS(NYC_CRS)) # set NYC SD proj to common proj
+
+nyc_sds <- st_read("nysd_18d/nysd.shp") %>% st_transform(crs = NYC_CRS) # using sf
+
+
 
 # Perform a little surgery on NYC School District 10. SD10 is mostly in the
 # Bronx, but a tiny bit of it (Marble Hill) is in Manhattan but on the Bronx
@@ -177,24 +182,19 @@ nyc_sds <- spTransform(nyc_sds, CRS(NYC_CRS)) # set NYC SD proj to common proj
 # isolate sd10's data, sum the area, drop the length. Note this will add
 # problematic border length data on SD10, since we're erasing internal
 # perimeter. Don't use the length. 
-sd10_data <- nyc_sds@data %>% filter(SchoolDist == 10) %>%
-  summarise_at(c("Shape_Area", "Shape_Leng"), sum) %>% 
-  mutate(SchoolDist = as.integer(10))
+# sd10_data <- nyc_sds@data %>% filter(SchoolDist == 10) %>%
+sd10 <- nyc_sds %>% filter(SchoolDist == 10) %>%
+  group_by(SchoolDist) %>% 
+  summarise_at(c("Shape_Area", "Shape_Leng"), sum) 
 
-# aggregate both polygons for SD10 into a single poly.
-sd10_one_poly <- nyc_sds %>% filter(SchoolDist == 10) %>% aggregate()
-
-# combine the above polygons and data into a single SPDF
-sd10_spdf <- SpatialPolygonsDataFrame(sd10_one_poly, sd10_data)
+# # aggregate both polygons for SD10 into a single poly.
+# sd10_one_poly <- nyc_sds %>% filter(SchoolDist == 10) %>% st_union()
 
 # bind together shapefile of polys other than SD10 with the new merged SD10 SPDF
-nyc_sds <- bind(sd10_spdf, filter(nyc_sds, SchoolDist != 10))
+# nyc_sds <- bind(sd10_spdf, filter(nyc_sds, SchoolDist != 10))
 
-rm(list = c("sd10_spdf", "sd10_one_poly", "sd10_data"))
-
-
-
-
+nyc_sds <- rbind(sd10, filter(nyc_sds, SchoolDist != 10))
+rm(sd10) #clean up
 
 districts_demo_snapshot <- 
   read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv")
@@ -238,17 +238,18 @@ schools_demo_snapshot <- schools_demo_snapshot %>%
 download.file(url = "https://data.cityofnewyork.us/download/jfju-ynrr/application%2Fzip", destfile = "school_points.zip")
 unzip("school_points.zip", exdir = "school_points", overwrite = T)
 
-school_points <- readOGR(dsn = "school_points", layer = "Public_Schools_Points_2011-2012A")
+# school_points <- readOGR(dsn = "school_points", layer = "Public_Schools_Points_2011-2012A")
+
+school_points <- st_read("school_points/Public_Schools_Points_2011-2012A.shp")
 
 names(school_points) %<>% 
   str_to_lower()
 
+
 # clean up trailing whitespace in ats_code
 school_points$ats_code %<>% str_trim()
 
-school_points <- spTransform(school_points, CRS(NYC_CRS))
-
-
+school_points <- st_transform(school_points, st_crs(NYC_CRS))
 
 
 
@@ -271,4 +272,3 @@ man_bx_tracts <- tidycensus::get_acs(state = "NY",
                                      geography = "tract", 
                                      geometry = T)
 
-man_bx_tracts_spdf <- as(st_geometry(man_bx_tracts), "Spatial")
