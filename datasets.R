@@ -272,3 +272,27 @@ man_bx_tracts <- tidycensus::get_acs(state = "NY",
                                      geography = "tract", 
                                      geometry = T)
 
+# NYC School Zones - at https://data.cityofnewyork.us/Education/2017-2018-School-Zones/ghq4-ydq4
+nyc_hs_zones <- read_sf("https://data.cityofnewyork.us/resource/9hw3-gi34.geojson") %>% 
+  st_transform(., crs = NYC_CRS)
+
+nyc_ms_zones <- read_sf("https://data.cityofnewyork.us/resource/jxpn-gg5q.geojson") %>% 
+  st_transform(., crs = NYC_CRS)
+
+nyc_es_zones <- read_sf("https://data.cityofnewyork.us/resource/xehh-f7pi.geojson") %>% 
+  st_transform(., crs = NYC_CRS)
+
+# NYC bus routes
+bus_url <- "http://faculty.baruch.cuny.edu/geoportal/data/nyc_transit/may2018/bus_routes_nyc_may2018.zip"
+dir.create("bus_routes")
+download.file(bus_url, "bus_routes/bus_routes_nyc_may2018.zip")
+unzip("bus_routes/bus_routes_nyc_may2018.zip")
+nyc_bus_routes <- st_read("bus_routes_nyc_may2018.shp")
+st_transform(nyc_bus_routes, crs = NYC_CRS)
+
+# NYC bus shelters
+nyc_bus_shelters <- 
+  st_read("https://data.cityofnewyork.us/api/geospatial/qafz-7myz?method=export&format=GeoJSON") %>% 
+  st_transform(., crs=NYC_CRS)
+
+

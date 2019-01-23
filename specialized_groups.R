@@ -126,10 +126,52 @@ avg_ell <- mean(sch_dem_snp$pct_ell)
 schools_with_high_ell <- sch_dem_snp %>% filter(pct_ell > quantile(pct_ell, .9))
 schools_with_high_ell
 
-tmap_man_bx_background() + tm_shape(schools_with_high_ell) + tm_dots(size = "pct_ell")
+hs <- sch_dem_snp %>% filter(str_detect(grades, "09,10,11,12"))
+
+hs_zones <- st_join(nyc_hs_zones, hs)
+
+hs_high_ell <- hs_zones %>% filter(pct_ell > quantile(pct_ell, 0.9, na.rm = T))
+
+tmap_man_bx_background() +
+  tm_shape(hs_high_ell) + tm_borders() + tm_dots()
 
 
 
+tracts_with_high_ell <- st_join(nyc_tracts, schools_with_high_ell) %>%
+  filter(!is.na(pct_ell))
+
+tracts_with_high_ell
+
+tmap_man_bx_background() +
+  tm_shape(nyc_tracts) + tm_borders(alpha = 0.1) +
+  tm_shape(tracts_with_high_ell) + tm_fill(col = "blue") + tm_dots()
+
+zips_with_high_ell <- st_join(nyc_area_zips, schools_with_high_ell) %>% 
+  filter(!is.na(pct_ell))
+
+
+
+
+
+
+
+
+
+
+
+nyc_hs_zones
+
+
+
+tmap_man_bx_background() + tm_shape(schools_with_high_ell) +
+  tm_shape()
++ tm_dots(size = "pct_ell")
+
+ -> test_1
+
+test_1 %<>% filter(!is.na(pct_swd))
+
+plot(st_geometry(test_1))
 
 st_join(schools_with_high_ell, nyc_tracts, join = st_intersects) -> test_1
 
