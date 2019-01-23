@@ -124,8 +124,12 @@ avg_ell <- mean(sch_dem_snp$pct_ell)
 # filter schools spdf for schools in 90th or greater percentile of % ELL
 # enrollment
 schools_with_high_ell <- sch_dem_snp %>% filter(pct_ell > quantile(pct_ell, .9))
+schools_with_high_ell
 
 tmap_man_bx_background() + tm_shape(schools_with_high_ell) + tm_dots(size = "pct_ell")
+
+
+
 
 st_join(schools_with_high_ell, nyc_tracts, join = st_intersects) -> test_1
 
@@ -149,7 +153,6 @@ tmap_man_bx_background() + tm_shape(test_1) + tm_borders() + tm_fill(col = "red"
 
 
 
-raster::intersect(nyc_sds, )
 
 
 
