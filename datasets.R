@@ -9,7 +9,7 @@ check.packages <- function(pkg){
 
 packages <- c('sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'viridis', 'viridisLite', 'rstudioapi', 'magrittr')
+              'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass')
 
 check.packages(packages)
 
@@ -46,79 +46,6 @@ if(Sys.getenv("CENSUS_API_KEY") == "") {
 }
 
 
-# HUM II RECRUITMENT DATA ------------------------------------------------------
-# This project requires the spreadsheet "historical_recruitment_data.xlsx" - HUM
-# II recruitment data.
-
-# Read in the data from each sheet
-sheet_1 <- read_xlsx("historical_recruitment_data.xlsx", sheet = 1)
-sheet_2 <- read_xlsx("historical_recruitment_data.xlsx", sheet = 2)
-sheet_3 <- read_xlsx("historical_recruitment_data.xlsx", sheet = 3)
-
-# The below three commands clean and standardize the colnames for each sheet's
-# vars
-str_to_lower(str_replace_all(names(sheet_1), 
-                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
-  str_replace_all("[:punct:]+", "_") %>% 
-  str_replace_all("^[:punct:]|[:punct:]$", "") -> names(sheet_1)
-
-str_to_lower(str_replace_all(names(sheet_2), 
-                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
-  str_replace_all("[:punct:]+", "_") %>% 
-  str_replace_all("^[:punct:]|[:punct:]$", "") -> names(sheet_2)
-
-str_to_lower(str_replace_all(names(sheet_3), 
-                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
-  str_replace_all("[:punct:]+", "_") %>% 
-  str_replace_all("^[:punct:]|[:punct:]$", "") -> names(sheet_3)
-
-
-# Select just the cols we need - location and application pd. Also commonly
-# format zip codes (sheet two was numeric, sheets 1 and 3 were strings with
-# trailing nonsignificant 0)
-sheet_1 %>% mutate(studentaddress_zip =
-                     str_sub(as.character(studentaddress_zip),
-                             1, 5)) -> sheet_1_trimmed
-
-sheet_2 %>% mutate(studentaddress_zip = 
-                     str_sub(as.character(studentaddress_zip),
-                             1, 5)) -> sheet_2_trimmed
-
-sheet_3 %>% mutate(studentaddress_zip =
-                     str_sub(as.character(studentaddress_zip),
-                             1, 5)) -> sheet_3_trimmed
-
-# Combine the three sheets
-bind_rows(sheet_1_trimmed, 
-          sheet_2_trimmed, 
-          sheet_3_trimmed) -> recruitment_data # used to be recruitment_data_man_bx_merged
-
-# Clean up unneeded vars
-rm(list = c("sheet_1", 
-            "sheet_1_trimmed", 
-            "sheet_2", 
-            "sheet_2_trimmed", 
-            "sheet_3", 
-            "sheet_3_trimmed"))
-
-
-# Strip extraneous year from enrollment period and rename to "year", rename
-# studentaddress_zip to zip, then cast year as numeric
-recruitment_data %<>% 
-  mutate(enrollment_period = str_sub(enrollment_period, 1, 4)) %>% 
-  rename(year = enrollment_period, zip = studentaddress_zip) %>% 
-  mutate(year = as.numeric(year)) %>% 
-  filter(!is.na(studentaddress_coordinates)) %>% # to remove one pesky record in 2018...
-  separate(studentaddress_coordinates, c("lat", "long"), sep = ",") %>% 
-  mutate(long = as.numeric(long), lat = as.numeric(lat))
-
-# One hand fix to correct a typo in data entry
-recruitment_data[recruitment_data$zip == "1.047", "zip"] <- "10473"
-
-
-# recruitment data for manhattan and bx only
-recruitment_data_man_bx <- recruitment_data %>% 
-  filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
 
 
 options(tigris_use_cache = T)
@@ -139,19 +66,8 @@ nyc_area_zips <-
 NYC_CRS <- st_crs(nyc_area_zips)
 
 
-# create SPDF of application points
-# application_points_spdf <- recruitment_data
-# coordinates(application_points_spdf) <- ~long + lat # move coords into SPDF slot
-# proj4string(application_points_spdf) <- CRS(NYC_CRS) # set common projection
 
-# SF of application points
-application_points <- st_as_sf(recruitment_data, coords = c("long", "lat"), crs = NYC_CRS) %>% 
-  mutate(registered = ifelse(!is.na(registration_completed_date), T, F))
 
-# SF of registration points - just those that filtered as registered
-registration_points <- application_points %>% 
-  dplyr::select(-registration_completed_date) %>% filter(registered == T) %>% 
-  dplyr::select(-registered)
   
 
 # FIlter just the ZCTAs we're interested in - Man/Bx
@@ -238,8 +154,6 @@ schools_demo_snapshot <- schools_demo_snapshot %>%
 download.file(url = "https://data.cityofnewyork.us/download/jfju-ynrr/application%2Fzip", destfile = "school_points.zip")
 unzip("school_points.zip", exdir = "school_points", overwrite = T)
 
-# school_points <- readOGR(dsn = "school_points", layer = "Public_Schools_Points_2011-2012A")
-
 school_points <- st_read("school_points/Public_Schools_Points_2011-2012A.shp")
 
 names(school_points) %<>% 
@@ -251,26 +165,18 @@ school_points$ats_code %<>% str_trim()
 
 school_points <- st_transform(school_points, st_crs(NYC_CRS))
 
-
+# add point geometry to school demographic data
+schools_demo_snapshot <- inner_join(schools_demo_snapshot, school_points, by = c("dbn" = "ats_code")) %>% st_as_sf()
 
 
 
 # Get census tract shapefiles
 
-nyc_tracts <- tidycensus::get_acs(state = "NY",
-                                  variables = "B01003_001",
-                                  county = c("New York", "Bronx", "Kings", "Queens", "Richmond"), 
-                                  geography = "tract",
-                                  geometry = T)
-
-
-
-# replace this with a filter once I figure out how to work sf files
-man_bx_tracts <- tidycensus::get_acs(state = "NY",
-                                     variables = "B01003_001",
-                                     county = c("New York", "Bronx"), 
-                                     geography = "tract", 
-                                     geometry = T)
+# NYC tracts clipped to shoreline available here: 
+# https://www1.nyc.gov/site/planning/data-maps/open-data/districts-download-metadata.page
+nyc_tracts <- 
+  st_read("http://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/nyct2010/FeatureServer/0/query?where=1=1&outFields=*&outSR=4326&f=geojson")
+nyc_tracts <- nyc_tracts %>% st_transform(crs = NYC_CRS)
 
 # NYC School Zones - at https://data.cityofnewyork.us/Education/2017-2018-School-Zones/ghq4-ydq4
 nyc_hs_zones <- read_sf("https://data.cityofnewyork.us/resource/9hw3-gi34.geojson") %>% 
@@ -284,9 +190,12 @@ nyc_es_zones <- read_sf("https://data.cityofnewyork.us/resource/xehh-f7pi.geojso
 
 # NYC bus routes
 bus_url <- "http://faculty.baruch.cuny.edu/geoportal/data/nyc_transit/may2018/bus_routes_nyc_may2018.zip"
-dir.create("bus_routes")
+if (dir.exists("bus_routes") == F) {
+  dir.create("bus_routes")
+  }
+
 download.file(bus_url, "bus_routes/bus_routes_nyc_may2018.zip")
-unzip("bus_routes/bus_routes_nyc_may2018.zip")
+unzip("bus_routes/bus_routes_nyc_may2018.zip", overwrite = T)
 nyc_bus_routes <- st_read("bus_routes_nyc_may2018.shp")
 st_transform(nyc_bus_routes, crs = NYC_CRS)
 
@@ -296,3 +205,98 @@ nyc_bus_shelters <-
   st_transform(., crs=NYC_CRS)
 
 
+# NYC Neighborhood Tabulation Areas (NTAs):
+nyc_ntas <- st_read("https://data.cityofnewyork.us/resource/93vf-i5bz.geojson") %>% 
+  st_transform(., crs = NYC_CRS)
+
+
+
+
+
+# HUM II RECRUITMENT DATA ------------------------------------------------------
+# This project requires the spreadsheet "historical_recruitment_data.xlsx" - HUM
+# II recruitment data.
+
+# Read in the data from each sheet
+sheet_1 <- read_xlsx("historical_recruitment_data.xlsx", sheet = 1)
+sheet_2 <- read_xlsx("historical_recruitment_data.xlsx", sheet = 2)
+sheet_3 <- read_xlsx("historical_recruitment_data.xlsx", sheet = 3)
+
+# The below three commands clean and standardize the colnames for each sheet's
+# vars
+str_to_lower(str_replace_all(names(sheet_1), 
+                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
+  str_replace_all("[:punct:]+", "_") %>% 
+  str_replace_all("^[:punct:]|[:punct:]$", "") -> names(sheet_1)
+
+str_to_lower(str_replace_all(names(sheet_2), 
+                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
+  str_replace_all("[:punct:]+", "_") %>% 
+  str_replace_all("^[:punct:]|[:punct:]$", "") -> names(sheet_2)
+
+str_to_lower(str_replace_all(names(sheet_3), 
+                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
+  str_replace_all("[:punct:]+", "_") %>% 
+  str_replace_all("^[:punct:]|[:punct:]$", "") -> names(sheet_3)
+
+
+# Select just the cols we need - location and application pd. Also commonly
+# format zip codes (sheet two was numeric, sheets 1 and 3 were strings with
+# trailing nonsignificant 0)
+sheet_1 %>% mutate(studentaddress_zip =
+                     str_sub(as.character(studentaddress_zip),
+                             1, 5)) -> sheet_1_trimmed
+
+sheet_2 %>% mutate(studentaddress_zip = 
+                     str_sub(as.character(studentaddress_zip),
+                             1, 5)) -> sheet_2_trimmed
+
+sheet_3 %>% mutate(studentaddress_zip =
+                     str_sub(as.character(studentaddress_zip),
+                             1, 5)) -> sheet_3_trimmed
+
+# Combine the three sheets
+bind_rows(sheet_1_trimmed, 
+          sheet_2_trimmed, 
+          sheet_3_trimmed) -> recruitment_data # used to be recruitment_data_man_bx_merged
+
+# Clean up unneeded vars
+rm(list = c("sheet_1", 
+            "sheet_1_trimmed", 
+            "sheet_2", 
+            "sheet_2_trimmed", 
+            "sheet_3", 
+            "sheet_3_trimmed"))
+
+
+# Strip extraneous year from enrollment period and rename to "year", rename
+# studentaddress_zip to zip, then cast year as numeric
+recruitment_data %<>% 
+  mutate(enrollment_period = str_sub(enrollment_period, 1, 4)) %>% 
+  rename(year = enrollment_period, zip = studentaddress_zip) %>% 
+  mutate(year = as.numeric(year)) %>% 
+  filter(!is.na(studentaddress_coordinates)) %>% # to remove one pesky record in 2018...
+  separate(studentaddress_coordinates, c("lat", "long"), sep = ",") %>% 
+  mutate(long = as.numeric(long), lat = as.numeric(lat))
+
+# One hand fix to correct a typo in data entry
+recruitment_data[recruitment_data$zip == "1.047", "zip"] <- "10473"
+
+
+# recruitment data for manhattan and bx only
+recruitment_data_man_bx <- recruitment_data %>% 
+  filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
+
+# convert recruitment_data to simple features file
+recruitment_data <- recruitment_data %>% st_as_sf(coords = c("long", "lat"), crs = NYC_CRS)
+
+# SF of application points
+application_points <- recruitment_data %>% 
+  mutate(registered = ifelse(!is.na(registration_completed_date), T, F))
+
+# SF of registration points - just those that filtered as registered
+registration_points <- application_points %>% 
+  dplyr::select(-registration_completed_date) %>% filter(registered == T) %>% 
+  dplyr::select(-registered)
+
+set_sourcefile_wd()
