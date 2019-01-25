@@ -55,9 +55,7 @@ tmap_man_bx_background <- function() {
 
 tmap_man_bx_zoom <- function() {
   return(
-    tm_shape(nyc_area_zips, 
-             ylim = c(40.77, 40.918),
-             xlim = c(-73.98, -73.78)) +
+    tm_shape(nyc_area_zips) +
       tm_fill(col = "grey90")
   )
 }

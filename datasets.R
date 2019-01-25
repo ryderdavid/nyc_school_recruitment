@@ -46,25 +46,25 @@ if(Sys.getenv("CENSUS_API_KEY") == "") {
 }
 
 
+##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
+# CRS to transform projeections of any other layer being used when necessary
+# NYC_CRS <- proj4string(nyc_area_zips)
+# NYC_CRS <- st_crs(nyc_area_zips)
+wgs84_crs <- "+proj=utm +zone=18 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"
 
 
-options(tigris_use_cache = T)
+
 
 # Download shapefiles for NYC area ZCTAs to render as background layer
+options(tigris_use_cache = T)
 nyc_area_zips <- 
   zctas(cb = T, starts_with = c('070','071','072','073','074',
                                 '075','076','100','101','102',
                                 '103','104','105','106','107',
                                 '108','109','110','111','112',
-                                '113','114','115','116')) %>% as("sf")
-
-
-
-##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
-# CRS to transform projeections of any other layer being used when necessary
-# NYC_CRS <- proj4string(nyc_area_zips)
-NYC_CRS <- st_crs(nyc_area_zips)
-
+                                '113','114','115','116')) %>% 
+  as("sf") %>%
+  st_transform(crs = wgs84_crs)
 
 
 
@@ -83,34 +83,15 @@ download.file("https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-
   destfile = "nysd_18d.zip")
 unzip("nysd_18d.zip", overwrite = T)
 
-# nyc_sds <- readOGR(dsn = "nysd_18d", layer = "nysd") 
-# nyc_sds <- spTransform(nyc_sds, CRS(NYC_CRS)) # set NYC SD proj to common proj
 
-nyc_sds <- st_read("nysd_18d/nysd.shp") %>% st_transform(crs = NYC_CRS) # using sf
+nyc_sds <- st_read("https://data.cityofnewyork.us/resource/cuae-wd7h.geojson") %>% 
+  st_transform(crs = wgs84_crs) %>% 
+  group_by(school_dist) %>% 
+  summarise(shape_area = sum(as.numeric(shape_area)), 
+            shape_leng = sum(as.numeric(shape_leng)),
+            geometry = st_union(geometry))
 
 
-
-# Perform a little surgery on NYC School District 10. SD10 is mostly in the
-# Bronx, but a tiny bit of it (Marble Hill) is in Manhattan but on the Bronx
-# side of the river. The shapefile divides SD into manhattan and bx sides, this
-# script merges those into a borough-agnostic polygon. 
-
-# isolate sd10's data, sum the area, drop the length. Note this will add
-# problematic border length data on SD10, since we're erasing internal
-# perimeter. Don't use the length. 
-# sd10_data <- nyc_sds@data %>% filter(SchoolDist == 10) %>%
-sd10 <- nyc_sds %>% filter(SchoolDist == 10) %>%
-  group_by(SchoolDist) %>% 
-  summarise_at(c("Shape_Area", "Shape_Leng"), sum) 
-
-# # aggregate both polygons for SD10 into a single poly.
-# sd10_one_poly <- nyc_sds %>% filter(SchoolDist == 10) %>% st_union()
-
-# bind together shapefile of polys other than SD10 with the new merged SD10 SPDF
-# nyc_sds <- bind(sd10_spdf, filter(nyc_sds, SchoolDist != 10))
-
-nyc_sds <- rbind(sd10, filter(nyc_sds, SchoolDist != 10))
-rm(sd10) #clean up
 
 districts_demo_snapshot <- 
   read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv")
@@ -123,6 +104,21 @@ names(districts_demo_snapshot) %<>%
   str_replace_all("\\(|\\)", "") %>% 
   str_replace_all("\\&", "") %>% 
   str_replace_all("_{2,}", "_")
+
+districts_demo_snapshot <- districts_demo_snapshot %>% 
+  rename(num_swd = students_with_disabilities_1, 
+         pct_swd = students_with_disabilities_2,
+         num_ell = english_language_learners_1, 
+         pct_ell = english_language_learners_2, 
+         num_pov = poverty_1, pct_pov = poverty_2)
+
+districts_demo_snapshot <- 
+  inner_join(districts_demo_snapshot, nyc_sds, 
+             by = c("administrative_district" = "SchoolDist")) %>% 
+  st_as_sf()
+
+districts_demo_snapshot_1718 <- districts_demo_snapshot %>% 
+  filter(year == "2017-18")
 
 districts_demo_snapshot
 
@@ -144,6 +140,7 @@ schools_demo_snapshot <- schools_demo_snapshot %>%
          num_ell = num_english_language_learners, pct_ell = pct_english_language_learners,
          num_pov = num_poverty, pct_pov = pct_poverty)
 
+schools_demo_snapshot_1718 <- schools_demo_snapshot %>% filter(year == "2017-18")
 
 # Shapefile of public school points - This is an ESRI shape file of school point
 # locations based on the official address.  It includes some additional basic
@@ -163,7 +160,7 @@ names(school_points) %<>%
 # clean up trailing whitespace in ats_code
 school_points$ats_code %<>% str_trim()
 
-school_points <- st_transform(school_points, st_crs(NYC_CRS))
+school_points <- st_transform(school_points, crs = wgs84_crs)
 
 # add point geometry to school demographic data
 schools_demo_snapshot <- inner_join(schools_demo_snapshot, school_points, by = c("dbn" = "ats_code")) %>% st_as_sf()
@@ -176,17 +173,20 @@ schools_demo_snapshot <- inner_join(schools_demo_snapshot, school_points, by = c
 # https://www1.nyc.gov/site/planning/data-maps/open-data/districts-download-metadata.page
 nyc_tracts <- 
   st_read("http://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/nyct2010/FeatureServer/0/query?where=1=1&outFields=*&outSR=4326&f=geojson")
-nyc_tracts <- nyc_tracts %>% st_transform(crs = NYC_CRS)
+
+
+
+nyc_tracts <- nyc_tracts %>% st_transform(crs = wgs84_crs)
 
 # NYC School Zones - at https://data.cityofnewyork.us/Education/2017-2018-School-Zones/ghq4-ydq4
 nyc_hs_zones <- read_sf("https://data.cityofnewyork.us/resource/9hw3-gi34.geojson") %>% 
-  st_transform(., crs = NYC_CRS)
+  st_transform(., crs = wgs84_crs)
 
 nyc_ms_zones <- read_sf("https://data.cityofnewyork.us/resource/jxpn-gg5q.geojson") %>% 
-  st_transform(., crs = NYC_CRS)
+  st_transform(., crs = wgs84_crs)
 
 nyc_es_zones <- read_sf("https://data.cityofnewyork.us/resource/xehh-f7pi.geojson") %>% 
-  st_transform(., crs = NYC_CRS)
+  st_transform(., crs = wgs84_crs)
 
 # NYC bus routes
 bus_url <- "http://faculty.baruch.cuny.edu/geoportal/data/nyc_transit/may2018/bus_routes_nyc_may2018.zip"
@@ -197,20 +197,28 @@ if (dir.exists("bus_routes") == F) {
 download.file(bus_url, "bus_routes/bus_routes_nyc_may2018.zip")
 unzip("bus_routes/bus_routes_nyc_may2018.zip", overwrite = T)
 nyc_bus_routes <- st_read("bus_routes_nyc_may2018.shp")
-st_transform(nyc_bus_routes, crs = NYC_CRS)
+nyc_bus_routes <- st_transform(nyc_bus_routes, crs = wgs84_crs)
 
 # NYC bus shelters
 nyc_bus_shelters <- 
   st_read("https://data.cityofnewyork.us/api/geospatial/qafz-7myz?method=export&format=GeoJSON") %>% 
-  st_transform(., crs=NYC_CRS)
+  st_transform(., crs=wgs84_crs)
+
+nyc_bus_shelters$location <- str_to_title(nyc_bus_shelters$location, locale = "en")
 
 
 # NYC Neighborhood Tabulation Areas (NTAs):
 nyc_ntas <- st_read("https://data.cityofnewyork.us/resource/93vf-i5bz.geojson") %>% 
-  st_transform(., crs = NYC_CRS)
+  st_transform(., crs = wgs84_crs)
 
 
+manhattan_sf <- nyc_ntas %>% filter(boroname == "Manhattan") %>% st_union()
+bronx_sf <- nyc_ntas %>% filter(boroname == "Bronx") %>% st_union()
+brooklyn_sf <- nyc_ntas %>% filter(boroname == "Brooklyn") %>% st_union()
+queens_sf <- nyc_ntas %>% filter(boroname == "Queens") %>% st_union()
+staten_sf <- nyc_ntas %>% filter(boroname == "Staten Island") %>% st_union()
 
+nyc_sf <- st_union(c(manhattan_sf, bronx_sf, queens_sf, brooklyn_sf, staten_sf))
 
 
 # HUM II RECRUITMENT DATA ------------------------------------------------------
@@ -288,7 +296,7 @@ recruitment_data_man_bx <- recruitment_data %>%
   filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
 
 # convert recruitment_data to simple features file
-recruitment_data <- recruitment_data %>% st_as_sf(coords = c("long", "lat"), crs = NYC_CRS)
+recruitment_data <- recruitment_data %>% st_as_sf(coords = c("long", "lat"), crs = wgs84_crs)
 
 # SF of application points
 application_points <- recruitment_data %>% 
