@@ -10,23 +10,12 @@ set_sourcefile_wd()
 source("functions.R")
 
 
-# % of ELL enrollment as percentage of total enrollment, by district:
-tmap_mode("plot")
-tm_shape(nyc_area_zips, bbox = st_union(manhattan_sf, bronx_sf)) +
-  tm_fill(col = "grey90") + 
-  tm_shape(districts_demo_snapshot_1718) + 
-  tm_borders() + 
-  tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
-  tm_text("school_dist") + 
-  tm_layout(legend.position = c("left", "top"))
 
 
 
 
-high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>% 
-  filter(pct_ell > quantile(.$pct_ell, 0.95)) %>% 
-  filter(boro %in% c("X", "M")) %>% 
-  .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
+
+
 
 
 # plot location of all 95th percentile by ELL enrollment schools
@@ -54,6 +43,27 @@ high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>%
 
 
 # output bus lines to advertise on
+
+
+high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>% 
+  filter(pct_ell > quantile(.$pct_ell, 0.95)) %>% 
+  filter(boro %in% c("X", "M")) %>% 
+  .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
+
+
+schools_demo_snapshot_1718
+
+# % of ELL enrollment as percentage of total enrollment, by district:
+tmap_mode("plot")
+tmap_style("col_blind")
+tm_shape(nyc_area_zips, bbox = st_union(manhattan_sf, bronx_sf)) +
+  tm_fill(col = "grey90") + 
+  tm_shape(districts_demo_snapshot_1718, point.per = "feature") + 
+  tm_borders() + 
+  tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
+  tm_text("school_dist") + 
+  tm_layout(legend.position = c("left", "top")) + 
+  tm_shape(high_ell_schools_man_bx)
 
 
 

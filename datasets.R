@@ -85,32 +85,19 @@ unzip("nysd_18d.zip", overwrite = T)
 
 # NYC's SD geojson file only pulls in data as characters, which leads sf to read
 # them as factors which breaks all attempts at analysis. forcing NOT to factors
-# brings everything in as characters, which lets us cast each attribute 
-nyc_sds <- st_read("https://data.cityofnewyork.us/resource/cuae-wd7h.geojson", stringsAsFactors = F) %>% 
+# brings everything in as characters, which lets us cast each attribute to
+# numeric
+nyc_sds <- st_read("https://data.cityofnewyork.us/resource/cuae-wd7h.geojson", 
+                   stringsAsFactors = F) %>% 
   st_transform(crs = wgs84_crs) %>% 
   mutate(school_dist = as.numeric(school_dist), 
          shape_area = as.numeric(shape_area),
-         shape_leng = as.numeric(shape_leng))
-
-
-
-nyc_sd10 <- nyc_sds %>% 
-  filter(school_dist == 10) %>% 
+         shape_leng = as.numeric(shape_leng)) %>% 
   group_by(school_dist) %>% 
-  summarize(shape_area = sum(shape_area), 
-            shape_leng = sum(shape_leng), 
-            geometry = st_union(geometry))
+  summarize()
 
-nyc_sd10
 
-%>% 
-  group_by(school_dist) %>% 
-  summarise(shape_area = sum(as.numeric(shape_area)), 
-            shape_leng = sum(as.numeric(shape_leng)),
-            geometry = st_union(geometry)) %>% 
-  mutate(school_dist = as.numeric(school_dist))
 
-plot(nyc_sds)
 
 districts_demo_snapshot <- 
   read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv")

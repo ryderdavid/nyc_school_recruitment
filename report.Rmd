@@ -1,0 +1,11 @@
+set_sourcefile_wd <- function() {
+  library(rstudioapi) # 
+  current_path <- getActiveDocumentContext()$path 
+  setwd(dirname(current_path ))
+  print( getwd() )
+}
+
+set_sourcefile_wd()
+  
+source("functions.R")
+
