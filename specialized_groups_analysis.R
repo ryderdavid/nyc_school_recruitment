@@ -6,17 +6,18 @@ set_sourcefile_wd <- function() {
 }
 
 set_sourcefile_wd()
-
+  
 source("functions.R")
 
 
 # % of ELL enrollment as percentage of total enrollment, by district:
+tmap_mode("plot")
 tm_shape(nyc_area_zips, bbox = st_union(manhattan_sf, bronx_sf)) +
   tm_fill(col = "grey90") + 
-  tm_shape(districts_demo_snapshot_1718, point.per = "feature") + 
+  tm_shape(districts_demo_snapshot_1718) + 
   tm_borders() + 
   tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
-  tm_text("administrative_district") +
+  tm_text("school_dist") + 
   tm_layout(legend.position = c("left", "top"))
 
 
@@ -71,14 +72,14 @@ high_ell_bus_routes <-
 
 
 # create a dataframe of high ELL shelters
-high_ell_bus_shelters %>% st_set_geometry(NULL) %>% dplyr::select(shelter_id, location, longitude, latitude)
+high_ell_bus_shelters %>% st_set_geometry(NULL) %>% 
+  dplyr::select(shelter_id, location, longitude, latitude)
 
 
 
 ntas_with_high_ell <- st_join(nyc_ntas, high_ell_schools_man_bx)
   filter(!is.na(pct_ell))
 
-qtm(ntas_with_high_ell)
 
 tmap_mode("plot")
 tm_shape(nyc_area_zips, bbox = st_bbox(high_ell_schools_buffer)) + tm_borders(alpha = 0.2) +
@@ -91,6 +92,7 @@ tm_shape(high_ell_bus_shelters) +
 
   
 tmap_mode("view")
+tm_tiles("CartoDB.PositronNoLabels") + 
 tm_shape(high_ell_schools_buffer) + 
   tm_fill(col = "red", alpha = 0.3) +
 tm_shape(high_ell_schools_man_bx) + 
