@@ -7,21 +7,21 @@ check.packages <- function(pkg){
 
 # need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
 
-packages <- c('sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
+packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
               'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra")
 
 check.packages(packages)
 
-set_sourcefile_wd <- function() {
-  library(rstudioapi) # 
-  current_path <- getActiveDocumentContext()$path 
-  setwd(dirname(current_path ))
-  print( getwd() )
-}
+# set_sourcefile_wd <- function() {
+#   library(rstudioapi) # 
+#   current_path <- getActiveDocumentContext()$path 
+#   setwd(dirname(current_path ))
+#   print( getwd() )
+# }
 
 
-set_sourcefile_wd()
+
 if(!dir.exists("data")) {
   
   dir.create("data")
@@ -102,7 +102,6 @@ nyc_sds <- st_read("https://data.cityofnewyork.us/resource/cuae-wd7h.geojson",
 districts_demo_snapshot <- 
   read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv")
 
-districts_demo_snapshot
 
 
 names(districts_demo_snapshot) %<>% 
@@ -123,7 +122,6 @@ districts_demo_snapshot <- districts_demo_snapshot %>%
          pct_pov = poverty_2)
 
 
-tm_shape(nyc_sds) + tm_borders() + tm_text("school_dist")
 
 districts_demo_snapshot_1718 <- districts_demo_snapshot %>% 
   filter(year == "2017-18")
@@ -323,4 +321,4 @@ registration_points <- application_points %>%
   dplyr::select(-registration_completed_date) %>% filter(registered == T) %>% 
   dplyr::select(-registered)
 
-set_sourcefile_wd()
+# setwd("..")
