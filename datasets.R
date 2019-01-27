@@ -9,7 +9,7 @@ check.packages <- function(pkg){
 
 packages <- c('sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass')
+              'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra")
 
 check.packages(packages)
 
@@ -48,8 +48,7 @@ if(Sys.getenv("CENSUS_API_KEY") == "") {
 
 ##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
 # CRS to transform projeections of any other layer being used when necessary
-# NYC_CRS <- proj4string(nyc_area_zips)
-# NYC_CRS <- st_crs(nyc_area_zips)
+
 wgs84_crs <- "+proj=utm +zone=18 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"
 
 
@@ -67,10 +66,11 @@ nyc_area_zips <-
   st_transform(crs = wgs84_crs)
 
 
-
+# get a simple block of NJ coastline to add to baselayers of maps
+nj_land <- nyc_area_zips %>% filter(str_detect(GEOID10, "^07")) %>% st_union
   
 
-# FIlter just the ZCTAs we're interested in - Man/Bx
+# Filter just the ZCTAs we're interested in - Man/Bx
 man_bx_zips <- nyc_area_zips %>% filter(str_detect(GEOID10, "^100|^101|^102|^103|^104"))
 
 
@@ -153,7 +153,6 @@ schools_demo_snapshot <- schools_demo_snapshot %>%
          num_ell = num_english_language_learners, pct_ell = pct_english_language_learners,
          num_pov = num_poverty, pct_pov = pct_poverty)
 
-schools_demo_snapshot_1718 <- schools_demo_snapshot %>% filter(year == "2017-18")
 
 # Shapefile of public school points - This is an ESRI shape file of school point
 # locations based on the official address.  It includes some additional basic
@@ -170,14 +169,16 @@ names(school_points) %<>%
   str_to_lower()
 
 
-# clean up trailing whitespace in ats_code
-school_points$ats_code %<>% str_trim()
+# clean up trailing unicode characters in ats_code
+school_points$ats_code %<>% str_sub(1,6)
 
 school_points <- st_transform(school_points, crs = wgs84_crs)
 
 # add point geometry to school demographic data
 schools_demo_snapshot <- inner_join(schools_demo_snapshot, school_points, by = c("dbn" = "ats_code")) %>% st_as_sf()
 
+# filter out old years of schools demo snapshot
+schools_demo_snapshot_1718 <- schools_demo_snapshot %>% filter(year == "2017-18")
 
 
 # Get census tract shapefiles
@@ -232,6 +233,8 @@ queens_sf <- nyc_ntas %>% filter(boroname == "Queens") %>% st_union()
 staten_sf <- nyc_ntas %>% filter(boroname == "Staten Island") %>% st_union()
 
 nyc_sf <- st_union(c(manhattan_sf, bronx_sf, queens_sf, brooklyn_sf, staten_sf))
+
+
 
 
 # HUM II RECRUITMENT DATA ------------------------------------------------------

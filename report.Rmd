@@ -1,11 +1,31 @@
-set_sourcefile_wd <- function() {
-  library(rstudioapi) # 
-  current_path <- getActiveDocumentContext()$path 
-  setwd(dirname(current_path ))
-  print( getwd() )
-}
+---
+title: "HUM II Recruitment"
+author: "Ryder Cobean"
+output: html_document
+---
 
-set_sourcefile_wd()
-  
-source("functions.R")
 
+This report attempts to answer a number of questions for Humanities II Charter School in The Bronx, New York City.
+
+## ELL Recruitment
+Question: If I want to to target and recruit ells, where would the most sensible places be to work on targeted recruitment?
+
+
+
+```
+{r echo = FALSE}
+high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>% 
+  filter(pct_ell > quantile(.$pct_ell, 0.95)) %>% 
+  filter(boro %in% c("X", "M")) %>% 
+  .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
+
+tmap_mode("plot")
+tm_shape(nyc_area_zips, bbox = st_union(manhattan_sf, bronx_sf)) +
+  tm_fill(col = "grey90") + 
+  tm_shape(districts_demo_snapshot_1718, point.per = "feature") + 
+  tm_borders() + 
+  tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
+  tm_text("school_dist") + 
+  tm_layout(legend.position = c("left", "top")) + 
+  tm_shape(high_ell_schools_man_bx)
+```
