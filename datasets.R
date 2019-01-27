@@ -24,18 +24,18 @@ check.packages(packages)
 
 if(!dir.exists("data")) {
   
-  dir.create("data")
+  dir.create("data/downloads", recursive = T)
+
+} else if (!dir.exists("data/downloads")) {
+  
+  dir.create("data/downloads")
   
 }
-setwd("data")
 
 
-# API KEYS NEEDED FOR DATA:
-# Save keys as plaintext files in /api_keys/ -- ignored by git
+# setwd("data")
 
-# ACS - American Communities Survey US Census - Census Key
-# census_key <- read_file("../api_keys/census_key") %>% trim() %>% 
-#   census_api_key(., install = T)
+
 
 
 if(Sys.getenv("CENSUS_API_KEY") == "") {
@@ -78,10 +78,10 @@ man_bx_zips <- nyc_area_zips %>% filter(str_detect(GEOID10, "^100|^101|^102|^103
 # which is split over Bronx / Manhattan boundary. School District Shapefile
 # from:
 # https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-data/nysd_18d.zip
-
-download.file("https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-data/nysd_18d.zip", 
-  destfile = "nysd_18d.zip")
-unzip("nysd_18d.zip", overwrite = T)
+# 
+# download.file("https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-data/nysd_18d.zip", 
+#   destfile = "data/nysd_18d.zip")
+# unzip("nysd_18d.zip", exdir = "data/nysd_18d", overwrite = T)
 
 # NYC's SD geojson file only pulls in data as characters, which leads sf to read
 # them as factors which breaks all attempts at analysis. forcing NOT to factors
@@ -158,10 +158,10 @@ schools_demo_snapshot <- schools_demo_snapshot %>%
 # includes some basic school information such as Name, Address, Principal, and
 # Principal’s contact information.
 
-download.file(url = "https://data.cityofnewyork.us/download/jfju-ynrr/application%2Fzip", destfile = "school_points.zip")
-unzip("school_points.zip", exdir = "school_points", overwrite = T)
+download.file(url = "https://data.cityofnewyork.us/download/jfju-ynrr/application%2Fzip", destfile = "data/downloads/school_points.zip")
+unzip("data/downloads/school_points.zip", exdir = "data/school_points", overwrite = T)
 
-school_points <- st_read("school_points/Public_Schools_Points_2011-2012A.shp")
+school_points <- st_read("data/school_points/Public_Schools_Points_2011-2012A.shp")
 
 names(school_points) %<>% 
   str_to_lower()
@@ -202,13 +202,11 @@ nyc_es_zones <- read_sf("https://data.cityofnewyork.us/resource/xehh-f7pi.geojso
 
 # NYC bus routes
 bus_url <- "http://faculty.baruch.cuny.edu/geoportal/data/nyc_transit/may2018/bus_routes_nyc_may2018.zip"
-if (dir.exists("bus_routes") == F) {
-  dir.create("bus_routes")
-  }
 
-download.file(bus_url, "bus_routes/bus_routes_nyc_may2018.zip")
-unzip("bus_routes/bus_routes_nyc_may2018.zip", overwrite = T)
-nyc_bus_routes <- st_read("bus_routes_nyc_may2018.shp")
+
+download.file(bus_url, "data/downloads/bus_routes_nyc_may2018.zip", cacheOK = T)
+unzip("data/downloads/bus_routes_nyc_may2018.zip", exdir = "data/bus_routes", overwrite = T)
+nyc_bus_routes <- st_read("data/bus_routes/bus_routes_nyc_may2018.shp")
 nyc_bus_routes <- st_transform(nyc_bus_routes, crs = wgs84_crs)
 
 # NYC bus shelters
@@ -240,9 +238,9 @@ nyc_sf <- st_union(c(manhattan_sf, bronx_sf, queens_sf, brooklyn_sf, staten_sf))
 # II recruitment data.
 
 # Read in the data from each sheet
-sheet_1 <- read_xlsx("historical_recruitment_data.xlsx", sheet = 1)
-sheet_2 <- read_xlsx("historical_recruitment_data.xlsx", sheet = 2)
-sheet_3 <- read_xlsx("historical_recruitment_data.xlsx", sheet = 3)
+sheet_1 <- read_xlsx("data/historical_recruitment_data.xlsx", sheet = 1)
+sheet_2 <- read_xlsx("data/historical_recruitment_data.xlsx", sheet = 2)
+sheet_3 <- read_xlsx("data/historical_recruitment_data.xlsx", sheet = 3)
 
 # The below three commands clean and standardize the colnames for each sheet's
 # vars

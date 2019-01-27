@@ -13,8 +13,8 @@ Question: If I want to to target and recruit ells, where would the most sensible
 
 
 
-```{r message=FALSE, cache=TRUE, message=FALSE, warning=FALSE, echo=FALSE}
-source("datasets.R", print.eval = F)
+```{r message=FALSE, cache=TRUE, message=FALSE, warning=FALSE, echo=FALSE, results='hide'}
+# source("datasets.R", print.eval = F)
 
 tmap_mode("plot")
 tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
@@ -24,9 +24,47 @@ tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
     tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
     tm_text("school_dist") +
     tm_layout(legend.position = c("left", "top"),
-              main.title = "Percentage of ELL enrollment by district, 2017-18",
-              main.title.position = "center")
+              title = "Percentage of ELL enrollment by district, 2017-18",
+              title.bg.color = "white", title.bg.alpha = 0.6)
 
 
+
+
+# Plot schools in 95th percentile for ELL enrollment in Manhattan and The Bronx:
+high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>% 
+  filter(pct_ell > quantile(.$pct_ell, 0.95)) %>% 
+  filter(boro %in% c("X", "M")) %>%
+  .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
+
+tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + 
+  tm_fill(col = "grey90") +
+  tm_shape(nyc_sds) + tm_borders() + tm_fill(alpha = 0) +
+  tm_shape(high_ell_schools_man_bx) + 
+  tm_symbols(col = "red",
+             size = "pct_ell",
+             title.size = "% ELL enrollment",
+             perceptual = T,
+             sizes.legend = c(40,60,80,100), legend.size.is.portrait = T
+             ) + 
+  tm_layout(legend.position = c("left", .8),
+            title = paste("95th-percentile ELL-enrolling schools, Manhattan/Bronx"),
+            title.position = c("center", "top"),
+            title.bg.color = "white", title.bg.alpha = 0.6)
+
+
+
+
+```
+
+### Schools in Manhattan and the Bronx:
+#### 95th percentile for ELL enrollment
+
+
+```{r}
+tmap_mode("view")
+tm_shape(nyc_sds) + tm_borders() + tm_fill(alpha = 0) +
+  tm_shape(high_ell_schools_man_bx, bbox = high_ell_schools_man_bx) + 
+  tm_symbols(col = "red", 
+             size = 0.3)
 ```
 
