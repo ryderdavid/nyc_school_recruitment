@@ -188,7 +188,37 @@ nyc_tracts <-
 
 
 
+
+
 nyc_tracts <- nyc_tracts %>% st_transform(crs = wgs84_crs)
+
+
+nyc_tracts %>% filter(BoroName %in% c("Manhattan", "Bronx")) %>% st_geometry() %>% plot()
+
+
+# The below sets up the necessary shapefile and function to clip any shapefile
+# to the NYC shoreline (for example, the US Census Tract boundaries, which
+# extend into the Hudson and East Rivers). Passing your shapefile and nyc_water
+# to st_erase will clip them to the shoreline. Curiously, 
+st_erase <- function(x, y) {
+  st_difference(x, st_union(st_combine(y)))
+}
+
+bx_water <- tigris::area_water("NY", county = "Bronx", class = "sf")
+bk_water <- tigris::area_water("NY", county = "Kings", class = "sf")
+qn_water <- tigris::area_water("NY", county = "Queens", class = "sf")
+st_water <- tigris::area_water("NY", county = "Richmond", class = "sf")
+ny_water <- tigris::area_water("NY", county = "New York", year = 2017, class = "sf")
+
+nyc_water <- 
+  st_union(c(bx_water$geometry, 
+             bk_water$geometry, 
+             qn_water$geometry, 
+             st_water$geometry, 
+             ny_water$geometry))
+
+
+
 
 # NYC School Zones - at https://data.cityofnewyork.us/Education/2017-2018-School-Zones/ghq4-ydq4
 nyc_hs_zones <- read_sf("https://data.cityofnewyork.us/resource/9hw3-gi34.geojson") %>% 
