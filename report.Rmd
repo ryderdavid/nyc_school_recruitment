@@ -7,9 +7,14 @@ output: html_document
 
 This report attempts to answer a number of questions for Humanities II Charter School in The Bronx, New York City.
 
-## ELL Recruitment
-Question: If I want to to target and recruit ells, where would the most sensible places be to work on targeted recruitment?
 
+
+
+
+## Special Groups Recruitment
+#### Question: If I want to to target and recruit ells, where would the most sensible places be to work on targeted recruitment?
+
+This report reviewed the data from NYC's Department of Education on enrollment statistics in `r length(unique(districts_demo_snapshot_1718$school_dist))` districts, focusing on those in Manhattan and The Bronx. 
 
 
 
@@ -17,15 +22,17 @@ Question: If I want to to target and recruit ells, where would the most sensible
 # source("datasets.R", print.eval = F)
 
 tmap_mode("plot")
-tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
+
+
+plot1 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
   tm_fill(col = "grey90") + 
   tm_shape(districts_demo_snapshot_1718, point.per = "feature") + 
-    tm_borders() + 
-    tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
-    tm_text("school_dist") +
-    tm_layout(legend.position = c("left", "top"),
-              title = "Percentage of ELL enrollment by district, 2017-18",
-              title.bg.color = "white", title.bg.alpha = 0.6)
+  tm_borders() + 
+  tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
+  tm_text("school_dist") +
+  tm_layout(legend.position = c("left", "top"),
+            title = "Percentage of ELL enrollment by district, 2017-18",
+            title.bg.color = "white", title.bg.alpha = 0.6)
 
 
 
@@ -36,7 +43,7 @@ high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>%
   filter(boro %in% c("X", "M")) %>%
   .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
 
-tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + 
+plot2 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + 
   tm_fill(col = "grey90") +
   tm_shape(nyc_sds) + tm_borders() + tm_fill(alpha = 0) +
   tm_shape(high_ell_schools_man_bx) + 
@@ -44,13 +51,15 @@ tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
              size = "pct_ell",
              title.size = "% ELL enrollment",
              perceptual = T,
-             sizes.legend = c(40,60,80,100), legend.size.is.portrait = T
-             ) + 
-  tm_layout(legend.position = c("left", .8),
+             sizes.legend = c(40,60,80,100), legend.size.is.portrait = F) + 
+  tm_layout(legend.position = c("right", "bottom"),
+            legend.bg.color = "white", legend.bg.alpha = 1, legend.frame = "black",
             title = paste("95th-percentile ELL-enrolling schools, Manhattan/Bronx"),
             title.position = c("center", "top"),
             title.bg.color = "white", title.bg.alpha = 0.6)
 
+
+tmap_arrange(plot1, plot2, ncol = 2, asp = 1)
 
 
 
@@ -59,12 +68,16 @@ tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
 ### Schools in Manhattan and the Bronx:
 #### 95th percentile for ELL enrollment
 
+Principal Neagley has asked what might be strategies for targeted advertisement to reach out to neighborhoods 
 
-```{r}
+```{r echo=FALSE, message=FALSE}
 tmap_mode("view")
 tm_shape(nyc_sds) + tm_borders() + tm_fill(alpha = 0) +
   tm_shape(high_ell_schools_man_bx, bbox = high_ell_schools_man_bx) + 
-  tm_symbols(col = "red", 
-             size = 0.3)
+  tm_dots(col = "red", 
+             size = "pct_ell") + 
+  tm_view(bbox = c(manhattan_sf, bronx_sf),
+          set.zoom.limits = c(11,15),
+          dot.size.fixed = F)
 ```
 
