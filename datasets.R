@@ -9,7 +9,7 @@ check.packages <- function(pkg){
 
 packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra")
+              'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra", 'rmarkdown')
 
 check.packages(packages)
 
@@ -215,7 +215,8 @@ nyc_water <-
              bk_water$geometry, 
              qn_water$geometry, 
              st_water$geometry, 
-             ny_water$geometry))
+             ny_water$geometry)) %>%
+  st_transform(crs = wgs84_crs)
 
 
 
