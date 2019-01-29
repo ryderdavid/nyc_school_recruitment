@@ -7,7 +7,7 @@ output: html_document
 
 This report attempts to answer a number of questions for Humanities II Charter School in The Bronx, New York City.
 
-
+# 
 
 
 
@@ -17,8 +17,23 @@ This report attempts to answer a number of questions for Humanities II Charter S
 One question posed was what strategies could be employed to better target ELL recruitment efforts. 
 This report reviewed the data from NYC's Department of Education on enrollment statistics in `r length(unique(districts_demo_snapshot_1718$school_dist))` districts, focusing on those in Manhattan and The Bronx. 
 
-Below is the distribution of English Language Learner recruitment among districts and schools in New York, focusing on Manhattan and the Bronx. The second plot highlights those schools recruiting ELL students at the 95th percentile relative to all schools in New York.
-```{r message=FALSE, cache=TRUE, message=FALSE, warning=FALSE, echo=FALSE, results='hide'}
+```{r message=FALSE, message=FALSE, warning=FALSE, echo=FALSE, results='hide'}
+# Percentile formatting
+schools_percentile <- 0.95
+
+if((schools_percentile * 100) %% 10 == 1) {
+  sch_pctile_ord <- paste(as.character(schools_percentile * 100), "st", sep="")
+} else if ((schools_percentile * 100) %% 10 == 2) {
+  sch_pctile_ord <- paste(as.character(schools_percentile * 100), "nd", sep="")
+} else if ((schools_percentile * 100) %% 10 == 3) {
+  sch_pctile_ord <- paste(as.character(schools_percentile * 100), "rd", sep="")
+} else {
+  sch_pctile_ord <- paste(as.character(schools_percentile * 100), "th", sep="")
+}
+```
+
+Below is the distribution of English Language Learner recruitment among districts and schools in New York, focusing on Manhattan and the Bronx. The second plot highlights those schools recruiting ELL students at the `r paste(sch_pctile_ord)` percentile relative to all schools in New York.
+```{r message=FALSE, message=FALSE, warning=FALSE, echo=FALSE, results='hide'}
 # source("datasets.R", print.eval = F)
 tmap_mode("plot")
 plot1 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
@@ -31,9 +46,9 @@ plot1 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
             title = "Percentage of ELL enrollment by district, 2017-18",
             title.bg.color = "white", title.bg.alpha = 0.6)
 
-# Plot schools in 95th percentile for ELL enrollment in Manhattan and The Bronx:
+# Plot schools in determined percentile for ELL enrollment in Manhattan and The Bronx:
 high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>% 
-  filter(pct_ell > quantile(.$pct_ell, 0.95)) %>% 
+  filter(pct_ell > quantile(.$pct_ell, schools_percentile)) %>% 
   filter(boro %in% c("X", "M")) %>%
   .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
 
@@ -48,7 +63,8 @@ plot2 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
              sizes.legend = c(40,60,80,100), legend.size.is.portrait = F) + 
   tm_layout(legend.position = c("right", "bottom"),
             legend.bg.color = "white", legend.bg.alpha = 1, legend.frame = "black",
-            title = paste("95th-percentile ELL-enrolling schools, Manhattan/Bronx"),
+            title = paste(sch_pctile_ord, 
+                     "percentile ELL-enrolling schools, Manhattan/Bronx"),
             title.position = c("center", "top"),
             title.bg.color = "white", title.bg.alpha = 0.6)
 
@@ -81,20 +97,21 @@ lep_hh_by_tract_C16002 <-
 # language's limited english proficiency respondents. Make sure to not introduce
 # NaN's by dividing by zero!
 lep_hh_by_tract_C16002 %>% as_tibble() %>% 
+  filter(total_hh != 0) %>% # remove zero occupancy tracts like airports and parks
   transmute(total_lep = select(., spanish_lep, indeur_lep, 
                                asnpacisl_lep, otherlang_lep) %>% rowSums(),
-            pct_lep = ifelse(total_lep == 0, NA, 100 * total_lep / total_hh), 
+            pct_lep = ifelse(total_lep == 0, 0, 100 * total_lep / total_hh), 
             GEOID = GEOID) -> total_lep_by_tract
 
 
 # merge the data back into the geometry
-lep_hh_by_tract_C16002 <- left_join(lep_hh_by_tract_C16002, 
+lep_hh_by_tract_C16002 <- inner_join(lep_hh_by_tract_C16002, 
                                     total_lep_by_tract, 
                                     by = c("GEOID" = "GEOID"))
 
 # prep for plotting: add school districts for each tract, remove NA records,
-lep_hh_tracts_ready <- st_intersection(lep_hh_by_tract_C16002, nyc_sds) %>% 
-  filter(!is.na(pct_lep))
+lep_hh_by_tract_C16002 <- st_join(lep_hh_by_tract_C16002, nyc_sds) # %>% 
+  # filter(!is.na(pct_lep))
 
 
 tmap_mode("view")
@@ -102,23 +119,66 @@ tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) +
 tm_shape(nyc_sds, point.per = "feature", bbox = man_bx_bbox) + 
   tm_borders(alpha = 0.8) + 
   tm_text("school_dist") +
-tm_shape(lep_hh_tracts_ready) + 
+tm_shape(lep_hh_by_tract_C16002) + 
   tm_borders(alpha = 0.2) + 
   tm_fill(col = "pct_lep", 
           palette = "Reds",
           title = "% LEP Households",
           id = "NAME",
+          showNA = F,
           popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
                          "School District"="school_dist",
                          "Total Households"="total_hh",
                          "% LEP Households"="pct_lep"))
+
+# # Hidden: Plot mode available for printed version of report.
+# tmap_mode("plot")
+# tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + tm_fill(col = "grey90") +
+# tm_shape(lep_tracts) +
+#   tm_fill("pct_lep", palette = "Reds", style = "pretty",
+#           title = "% LEP households\nby census Tract") +
+#   tm_borders(alpha = 0.1) +
+#   tm_credits("Source: 2013-2017 ACS Five-Year Estimates",
+#              bg.color = "white", bg.alpha = 0.7, position = c("left", "bottom")) +
+#   tm_layout(legend.position = c("left", "top"),
+#             legend.height = .4,
+#             legend.width = .8,
+#             legend.title.size = 1,
+#             legend.title.fontface = "bold
 ```
 
 
-The following tracts house exceptionally high (above 90th percentile) proportions of limited English proficiency households:
 
+The following tracts house exceptionally high (above 90th percentile) proportions of limited English proficiency households:
+``` {r message=FALSE, cache=TRUE, message=FALSE, warning=FALSE, echo=FALSE}
+lep_hh_pctile <- quantile(lep_hh_by_tract_C16002$pct_lep, 0.9, na.rm = T)
+
+
+tmap_mode("view")
+tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
+tm_shape(nyc_sds, point.per = "feature", bbox = man_bx_bbox) + 
+  tm_borders(alpha = 0.8) + 
+  tm_text("school_dist") +
+tm_shape(lep_hh_by_tract_C16002 %>% 
+           filter(!is.na(pct_lep)) %>% 
+           filter(pct_lep >= lep_hh_pctile)
+         ) + 
+  tm_borders(alpha = 0.2) + 
+  tm_fill(col = "pct_lep", 
+          palette = "Reds",
+          title = "% LEP Households",
+          id = "NAME",
+          showNA = F,
+          popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
+                         "School District"="school_dist",
+                         "Total Households"="total_hh",
+                         "% LEP Households"="pct_lep"))
+
+```
 
 For targeting these areas, two options stand out: mailers to dense housing, and bus shelter/bus line advertisements in these areas.
+
+
 
 <!-- ```{r echo=FALSE, message=FALSE} -->
 <!-- # tmap_mode("view") -->

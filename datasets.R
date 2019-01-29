@@ -261,6 +261,11 @@ staten_sf <- nyc_ntas %>% filter(boroname == "Staten Island") %>% st_union()
 
 nyc_sf <- st_union(c(manhattan_sf, bronx_sf, queens_sf, brooklyn_sf, staten_sf))
 
+# set a bbox for common views of manhattan and bronx together
+man_bx_bbox <- st_bbox(st_union(manhattan_sf, bronx_sf))
+
+
+
 
 
 
@@ -350,4 +355,4 @@ registration_points <- application_points %>%
   dplyr::select(-registration_completed_date) %>% filter(registered == T) %>% 
   dplyr::select(-registered)
 
-# setwd("..")
+

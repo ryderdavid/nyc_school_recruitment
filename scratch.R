@@ -1,6 +1,4 @@
 
-acs5_vars_17 <- load_variables(2017, "acs5", cache = T)
-
 # GET 2017 5YR ACS HOUSEHOLD LANGUAGE SPOKEN BY LIMITED ENGLISH SPEAKING STATUS
 options(tigris_use_cache = TRUE)
 lep_hh_by_tract_C16002 <- 
@@ -34,17 +32,55 @@ lep_hh_by_tract_C16002 <- left_join(lep_hh_by_tract_C16002,
 # prep for plotting: add school districts for each tract, remove NA records,
 lep_hh_tracts_ready <- st_intersection(lep_hh_by_tract_C16002, nyc_sds) %>% 
   filter(!is.na(pct_lep))
-  
 
-lep_hh_tracts_ready %>% rename(`Percent LEP` = pct_lep, `Total households` = total_hh)
+lep_hh_join <- st_join(lep_hh_by_tract_C16002, nyc_sds)
+
+lep_hh_tracts_ready %>% filter(GEOID == "36081011900")
+
+lep_hh_join %>% filter(GEOID== "36081011900")
+
+
+
+
+
+lep_hh_pctile <- quantile(lep_hh_by_tract_C16002, 0.9)
+
 
 tmap_mode("view")
-tm_shape(nyc_sds, point.per = "feature", bbox = man_bx_bbox) + 
-  tm_borders() + 
+tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
+  tm_shape(nyc_sds, point.per = "feature", bbox = man_bx_bbox) + 
+  tm_borders(alpha = 0.8) + 
   tm_text("school_dist") +
-tm_shape(lep_hh_tracts_ready) + 
+  tm_shape(lep_hh_by_tract_C16002 %>% 
+             filter(!is.na(pct_lep)) %>% 
+             filter(pct_lep >= lep_hh_pctile)
+           ) + 
+             tm_borders(alpha = 0.2) + 
+             tm_fill(col = "pct_lep", 
+                     palette = "Reds",
+                     title = "% LEP Households",
+                     id = "NAME",
+                     showNA = F,
+                     popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
+                                    "School District"="school_dist",
+                                    "Total Households"="total_hh",
+                                    "% LEP Households"="pct_lep"))
+           
+
+
+
+
+
+
+tmap_mode("view")
+tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
+  tm_shape(nyc_sds, point.per = "feature", bbox = man_bx_bbox) + 
+  tm_borders(alpha = 0.8) + 
+  tm_text("school_dist") +
+  tm_shape(lep_hh_tracts_ready) + 
   tm_borders(alpha = 0.2) + 
   tm_fill(col = "pct_lep", 
+          palette = "Reds",
           title = "% LEP Households",
           id = "NAME",
           popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
@@ -53,38 +89,4 @@ tm_shape(lep_hh_tracts_ready) +
                          "% LEP Households"="pct_lep"))
 
 
-
-
-
-lep_tracts <- lep_hh_by_tract_C16002 %>% 
-  
-
-
-
-
-
-lep_percentile <- quantile(lep_tracts_clipped$pct_lep, .80)
-
-
-
-
-
-
-
-# Hidden: Plot mode available for printed version of report.
-tmap_mode("plot")
-tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + tm_fill(col = "grey90") +
-tm_shape(lep_tracts) +
-  tm_fill("pct_lep", palette = "Reds", style = "pretty",
-          title = "% LEP households\nby census Tract") +
-  tm_borders(alpha = 0.1) +
-  tm_credits("Source: 2013-2017 ACS Five-Year Estimates",
-             bg.color = "white", bg.alpha = 0.7, position = c("left", "bottom")) +
-  tm_layout(legend.position = c("left", "top"),
-            legend.height = .4,
-            legend.width = .8,
-            legend.title.size = 1,
-            legend.title.fontface = "bold")
-
-
-
+lep_pctile <- quantile(lep_hh_tracts_ready)
