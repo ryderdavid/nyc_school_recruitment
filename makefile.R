@@ -7,7 +7,7 @@ check.packages <- function(pkg){
 
 # need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
 
-packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
+packages <- c('pander', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
               'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra", 'rmarkdown')
 
@@ -43,3 +43,5 @@ set_sourcefile_wd()
 source('datasets.R')
 
 render('report.Rmd')
+
+pander::openFileInOS("report.Rmd")

@@ -151,7 +151,7 @@ tm_shape(lep_hh_by_tract_C16002) +
 
 The following tracts house exceptionally high (above 90th percentile) proportions of limited English proficiency households:
 ``` {r message=FALSE, cache=TRUE, message=FALSE, warning=FALSE, echo=FALSE}
-lep_hh_pctile <- quantile(lep_hh_by_tract_C16002$pct_lep, 0.9, na.rm = T)
+lep_hh_pctile <- quantile(lep_hh_by_tract_C16002$pct_lep, 0.8, na.rm = T)
 
 
 tmap_mode("view")
