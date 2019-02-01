@@ -3,13 +3,18 @@ title: "HUM II Recruitment"
 author: "Ryder Cobean"
 output: 
   html_document:
-    code_folding: hide
 ---
+
+<style>
+.leaflet {
+    margin: auto;
+}
+</style>
 
 This report attempts to answer a number of questions for Humanities II Charter School in The Bronx, New York City.
 
 ```{r global_options, include=FALSE}
-knitr::opts_chunk$set(fig.path='Figs/', message = F, warning = F)
+knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", message = F, warning = F)
 ```
 
 ```{r, setup, results='hide'}
@@ -23,7 +28,7 @@ check.packages <- function(pkg){
 
 # need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
 
-packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
+packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp',
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
               'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra", 'rmarkdown')
 
@@ -238,7 +243,10 @@ nyc_bus_shelters <-
   st_read("https://data.cityofnewyork.us/api/geospatial/qafz-7myz?method=export&format=GeoJSON") %>% 
   st_transform(., crs=wgs84_crs)
 
-nyc_bus_shelters$location <- str_to_title(nyc_bus_shelters$location, locale = "en")
+# nyc_bus_shelters$location <- str_to_title(nyc_bus_shelters$location, locale = "en")
+
+nyc_bus_shelters %<>% mutate(location = str_to_title(nyc_bus_shelters$location, locale = "en"),
+                            coords = paste(latitude, longitude, sep = ", "))
 
 
 # NYC Neighborhood Tabulation Areas (NTAs):
@@ -354,7 +362,7 @@ registration_points <- application_points %>%
 
 
 ## Special Groups Recruitment
-#### Question: If I want to to target and recruit ells, where would the most sensible places be to work on targeted recruitment?
+#### Question: If I want to to target and recruit ELL students, where would the most sensible places be to work on targeted recruitment?
 
 One question posed was what strategies could be employed to better target ELL recruitment efforts. 
 This report reviewed the data from NYC's Department of Education on enrollment statistics in `r length(unique(districts_demo_snapshot_1718$school_dist))` districts, focusing on those in Manhattan and The Bronx. 
@@ -435,6 +443,10 @@ lep_hh_by_tract_C16002 <-
   st_transform(crs = wgs84_crs) %>% 
   st_erase(., nyc_water)
 
+# get County name from longform tract name in NAME, get boro name from county names
+# Don't need this anymore since adding boro
+lep_hh_by_tract_C16002 %<>%
+  mutate(county_name = str_extract(NAME, "((?<=\\d, )[:graph:]+).+(?=\\sCounty)")) 
 
 # break out the data from the sf object and summarize across rows for each
 # language's limited english proficiency respondents. Make sure to not introduce
@@ -462,6 +474,10 @@ lep_hh_by_tract_C16002 <- inner_join(lep_hh_by_tract_C16002,
 # prep for plotting: add school districts for each tract.
 lep_hh_by_tract_C16002 <- st_join(lep_hh_by_tract_C16002, nyc_sds)
 
+# filter to just Manhattan and Bronx
+lep_hh_by_tract_C16002_manbx <- filter(lep_hh_by_tract_C16002,
+                                       county_name %in% c("New York", "Bronx"))
+
 
 ```
 The below interactive map shows the percentage of limited English proficiency households per census tract in NYC, with school district boundaries overlaid. __Note that this calculation has taken out of consideration those tracts with extremely low (first percentile and below) total tract populations.__ While some of those tracts have high proportions of limited English proficiency households, the total number of people living in them is extremely small, and most of them represent land that is largely a park or cemetery.
@@ -486,6 +502,7 @@ tm_shape(lep_hh_by_tract_C16002) +
                          "Total Households"="total_hh",
                          "% LEP Households"="pct_lep"))
 
+
 # # Hidden: Plot mode available for printed version of report.
 # tmap_mode("plot")
 # tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + tm_fill(col = "grey90") +
@@ -505,46 +522,71 @@ tm_shape(lep_hh_by_tract_C16002) +
 
 
 ```{r }
-
-
 pct <- 0.75
-lep_hh_manbx_by_quantile <- 
-  lep_hh_by_tract_C16002 %>% filter(pct_lep >= quantile(.$pct_lep, pct)) %>% 
+high_lep_hh_manbx <- 
+  lep_hh_by_tract_C16002_manbx %>% 
+  filter(pct_lep >= quantile(.$pct_lep, pct))
 
-  # need to add a way to filter boros
 
 # Get all bus shelters in NYC that are in pctile-th-percentile tracts by proportion
 # of LEP households
-bus_shelters_in_high_lep_tracts <- 
-  nyc_bus_shelters[lep_hh_quantile_subset, ]
 
-bus_shelters_in_high_lep_tracts_manbx <- bus_shelters_in_high_lep_tracts %>% 
-  filter(boro_name %in% c("Bronx", "Manhattan"))
 
-tmap_mode("view")
-tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
-tm_shape(nyc_sds, point.per = "feature", bbox = man_bx_bbox) + 
-  tm_borders(alpha = 0.8) + 
-  tm_text("school_dist") +
-tm_shape(lep_hh_quantile_subset) + 
-  tm_borders(alpha = 0.2) + 
-  tm_fill(col = "pct_lep", 
-          palette = "Reds",
-          title = "% LEP Households",
-          id = "NAME",
-          showNA = F,
-          popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
-                         "School District"="school_dist",
-                         "Total Households"="total_hh",
-                         "% LEP Households"="pct_lep")) +
-tm_shape(bus_shelters_in_high_lep_tracts) +
-  tm_dots(col = "#42f4e2")
+# 
+# high_lep_bus_shelters_manbx <- 
+#   nyc_bus_shelters[high_lep_hh_manbx, ]
+
+high_lep_bus_shelters_manbx <- st_intersection(nyc_bus_shelters, high_lep_hh_manbx)
 
 
 ```
-The following `r as.character(nrow(bus_shelters_in_high_lep_tracts))` bus shelters are located in the tracts in Manhattan and the Bronx with the highest (`r as.character(pct * 100)`th percentile) proportions of limited english proficiency. Again, census tracts with extremely low population (often parks, cemeteries and other such areas) have been removed prior to calculation.
+The following `r as.character(nrow(high_lep_bus_shelters_manbx))` bus shelters are located in the tracts in Manhattan and the Bronx with the highest (`r as.character(pct * 100)`th percentile) proportions of limited english proficiency. Again, census tracts with extremely low population (often parks, cemeteries and other such areas) have been removed prior to calculation.
 
-`r high_lep_bus_shelters_manbx`
 
-For targeting these areas, two options stand out: mailers to dense housing, and bus shelter/bus line advertisements in these areas.
+```{r}
+tmap_mode("view")
+  tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
+  tm_shape(nyc_sds, point.per = "feature", 
+           bbox = st_bbox(filter(high_lep_bus_shelters_manbx, boro_name == "Bronx"))) + 
+    tm_borders(alpha = 0.8) + 
+    tm_text("school_dist") +
+  tm_shape(high_lep_hh_manbx) + 
+    tm_borders(alpha = 0.2) + 
+    tm_fill(col = "pct_lep", 
+            palette = "Reds",
+            title = "% LEP Households",
+            id = "NAME",
+            showNA = F,
+            popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
+                           "School District"="school_dist",
+                           "Total Households"="total_hh",
+                           "% LEP Households"="pct_lep")) +
+  tm_shape(high_lep_bus_shelters_manbx) +
+    tm_dots(col = "#42f4e2",
+            id = "shelter_id",
+            popup.vars = c("Location" = "location",
+                           "Coordinates" = "coords",
+                           "Nearby LEP Households" = "total_lep",
+                           "% LEP households in Tract" = "pct_lep"))
+
+```
+\    
+The bus shelters mapped above are available below.
+\  
+```{r}
+shelter_table <- high_lep_bus_shelters_manbx %>% as_tibble() %>% 
+  transmute(`Shelter ID` = shelter_id, Location = location, 
+            `At or Between` = str_to_title(at_between, locale = "en"), Coordinates = coords,
+            `LEP Households` = total_lep) %>% arrange(desc(`LEP Households`))
+
+
+kable(shelter_table) %>%
+  kable_styling(bootstrap_options = "striped") %>% 
+  scroll_box(height = "300px")
+
+```
+\  
+\  
+The entire table can be copied and pasted into a spreadsheet and will retain its formatting.
+\  
 
