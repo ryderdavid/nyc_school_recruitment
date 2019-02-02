@@ -2,7 +2,7 @@
 title: "HUM II Recruitment"
 author: "Ryder Cobean"
 output: 
-  html_document:
+  html_document
 ---
 
 <style>
@@ -14,7 +14,7 @@ output:
 This report attempts to answer a number of questions for Humanities II Charter School in The Bronx, New York City.
 
 ```{r global_options, include=FALSE}
-knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", message = F, warning = F)
+knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", echo = F, warning = F, message = F)
 ```
 
 ```{r, setup, results='hide'}
