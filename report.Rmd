@@ -17,7 +17,7 @@ This report attempts to answer a number of questions for Humanities II Charter S
 knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", echo = F, warning = F, message = F)
 ```
 
-```{r, setup, results='hide'}
+```{r setup, results='hide'}
 
 check.packages <- function(pkg){
   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
@@ -238,6 +238,11 @@ unzip("data/downloads/bus_routes_nyc_may2018.zip", exdir = "data/bus_routes", ov
 nyc_bus_routes <- st_read("data/bus_routes/bus_routes_nyc_may2018.shp")
 nyc_bus_routes <- st_transform(nyc_bus_routes, crs = wgs84_crs)
 
+
+# merge bus routes by route (directions currently their own shapes)
+nyc_bus_routes %<>% group_by(route_id, route_shor, route_long, color) %>% 
+  summarize() %>% ungroup()
+
 # NYC bus shelters
 nyc_bus_shelters <- 
   st_read("https://data.cityofnewyork.us/api/geospatial/qafz-7myz?method=export&format=GeoJSON") %>% 
@@ -357,6 +362,47 @@ registration_points <- application_points %>%
   dplyr::select(-registered)
 
 ```
+```{r functions, results='hide'}
+
+st_intersects_tally_attribute <-
+  function(x = NULL,
+           y = NULL,
+           attribute = NULL) {
+    require(sf)
+    
+    a <- attribute
+    
+    # a list of x's length with each record containing a vector of indices of y's
+    # records that intersect with that record in x
+    xy <- st_intersects(x, y)
+    
+    
+    attr_n <- c() # empty vector to fill
+    for (r in 1:length(xy)) {
+      n <- 0
+      
+      if (length(xy[[r]]) == 0) {
+        n <- 0
+        
+      } else {
+        for (i in 1:length(xy[[r]])) {
+          n <- n + st_drop_geometry(y)[i, a]
+          
+        }
+        
+      }
+      
+      attr_n <- c(attr_n, n)
+      
+    }
+    
+    return(attr_n)
+    
+  }
+
+```
+
+
 
 ## Historical Trends in Applications and Registrations
 

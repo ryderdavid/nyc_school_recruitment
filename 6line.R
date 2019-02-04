@@ -1,3 +1,5 @@
+## Setup datasets -------------------------------------
+
 check.packages <- function(pkg){
   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
   if (length(new.pkg)) 
@@ -217,6 +219,8 @@ unzip("data/downloads/bus_routes_nyc_may2018.zip", exdir = "data/bus_routes", ov
 nyc_bus_routes <- st_read("data/bus_routes/bus_routes_nyc_may2018.shp")
 nyc_bus_routes <- st_transform(nyc_bus_routes, crs = wgs84_crs)
 
+
+
 # NYC bus shelters
 nyc_bus_shelters <- 
   st_read("https://data.cityofnewyork.us/api/geospatial/qafz-7myz?method=export&format=GeoJSON") %>% 
@@ -243,6 +247,7 @@ nyc_sf <- st_union(c(manhattan_sf, bronx_sf, queens_sf, brooklyn_sf, staten_sf))
 
 # set a bbox for common views of manhattan and bronx together
 man_bx_bbox <- st_bbox(st_union(manhattan_sf, bronx_sf))
+
 
 
 
@@ -390,6 +395,7 @@ lep_hh_by_tract_C16002_manbx <- filter(lep_hh_by_tract_C16002,
                                        county_name %in% c("New York", "Bronx"))
 
 
+## Work section -------------------------------------------------
 
 
 pct <- 0.75
@@ -401,123 +407,120 @@ high_lep_hh_manbx <-
 
 high_lep_bus_shelters_manbx <- st_intersection(nyc_bus_shelters, high_lep_hh_manbx)
 
-
-
-
 # routes_through_tracts <- st_intersects(nyc_bus_routes, high_lep_hh_manbx)
 routes_through_tracts <- st_intersects(nyc_bus_routes, lep_hh_by_tract_C16002)
 
-st_intersects_tally_attribute <- function(x = NULL, y = NULL, attribute = NULL) {
-  
-  require(sf)
-  
-  a <- attribute
-  
-  # a list of x's length with each record containing a vector of indices of y's
-  # records that intersect with that record in x
-  xy <- st_intersects(x, y) 
-  
-  
-  attr_n <- c() # empty vector to fill
-  for (r in 1:length(xy)) {
+st_intersects_tally_attr <-
+  function(x = NULL,
+           y = NULL,
+           attribute = NULL) {
+    require(sf)
     
-    n <- 0
+    a <- attribute
     
-    if (length(xy[[r]]) == 0) {
-      
+    # a list of x's length with each record containing a vector of indices of y's
+    # records that intersect with that record in x
+    xy <- st_intersects(x, y)
+    
+    
+    attr_n <- c() # empty vector to fill
+    for (r in 1:length(xy)) {
       n <- 0
       
-    } else {
-      
-      for (i in 1:length(xy[[r]])) {
+      if (length(xy[[r]]) == 0) {
+        n <- 0
         
-        n <- n + st_drop_geometry(y)[i, a]
+      } else {
+        for (i in 1:length(xy[[r]])) {
+          n <- n + st_drop_geometry(y)[i, a]
+          
+        }
         
       }
       
+      attr_n <- c(attr_n, n)
+      
     }
     
-    attr_n <- c(attr_n, n)
+    return(attr_n)
     
   }
-  
-  return(attr_n)
-  
-}
-
-
-st_intersects_tally_attribute(x = nyc_bus_routes, y = lep_hh_by_tract_C16002, attribute = "total_lep")
 
 
 
+# Create a subset of buses that just run in Manhattan and the Bronx
+manbx_bus_sgbp <- st_intersects(nyc_bus_routes, c(manhattan_sf, bronx_sf))
+manbx_bus_routes <- nyc_bus_routes[lengths(manbx_bus_sgbp) > 0, ]
+rm(manbx_bus_sgbp)  # get rid of helper variable
 
 
-mtcars %>% aggregate(x = ., by = list(gear), FUN = mean(), drop = T)
+manbx_bus_routes_with_lep <- 
+  manbx_bus_routes %>% 
+  bind_cols(lep_hhs_passby = 
+              st_intersects_tally_attr(manbx_bus_routes, 
+                                       lep_hh_by_tract_C16002_manbx, 
+                                       "total_lep"))
 
-
-
-nyc_bus_routes %>% group_by(route_id, route_shor, route_long) %>% 
-  summarize() %>% qtm
-
-
-
-
-
-
-
-
-
+manbx_bus_routes_with_lep %>% top_n(25, lep_hhs_passby)
 
 
 
-snyc_bus_routes_with_lep_hhs <- nyc_bus_routes %>% 
+manbx_bus_routes_with_lep_hhs <- nyc_bus_routes %>% 
+  bind_cols(total_lep_passthrough = st_intersects_tally_attribute(nyc_bus_routes, 
+                                       lep_hh_by_tract_C16002,
+                                       "total_lep"))
+
+
+
+nrow(nyc_bus_routes)
+
+length(st_intersects_tally_attribute(nyc_bus_routes, lep_hh_by_tract_C16002, "total_lep"))
+
+routes <- st_intersects()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+nyc_bus_routes_with_lep_hhs <- nyc_bus_routes %>% 
   mutate(total_lep_passthrough = st_intersects_tally_attribute(., lep_hh_by_tract_C16002, "total_lep"))
 
-nyc_bus_routes_with_lep_hhs %>% top_n(25, total_lep_passthrough) %>% arrange(desc(total_lep_passthrough)) %>% qtm
-
-zz <- c()
-for (r in 1:length(routes_through_tracts)) {
-  aa <- 0
-
-  if (length(routes_through_tracts[[r]]) == 0) {
-    aa <- 0
-  } else {
-    for (i in 1:length(routes_through_tracts[[r]])) {
-      aa <- aa + st_drop_geometry(lep_hh_by_tract_C16002)[i, "total_lep"]
-    }
-  }
-  
-  zz <- c(zz, aa)
-}
-
-
-high_lep_routes <- nyc_bus_routes %>% mutate(lep_hh_passby = zz) %>% top_n(25, lep_hh_passby) %>% arrange(desc(lep_hh_passby))
-
-qtm(high_lep_routes)
-
-high_lep_routes
-
-as_image(high_lep_routes, file = "~/Downloads/routes.png")
-
-
-nyc_bus_routes %>% filter(lengths(st_intersects(nyc_bus_routes, high_lep_hh_manbx)) > 20)
-
-st_intersects(nyc_bus_routes, high_lep_hh_manbx) %>% as_tibble()
 
 
 
 
-tract_indices <- st_intersects(nyc_bus_routes, high_lep_hh_manbx) %>% lengths()
-
-
-st_intersects(nyc_bus_routes, high_lep_hh_manbx)[[39]]
-
-  
-
-nyc_bus_routes %>% mutate(tracts = (st_intersects(., high_lep_hh_manbx)))
-
-
-tracts_along_routes[[]]
 
 
 
@@ -545,4 +548,4 @@ tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) +
                          "Coordinates" = "coords",
                          "Nearby LEP Households" = "total_lep",
                          "% LEP households in Tract" = "pct_lep")) + 
-  tm_shape(high_lep_routes) + tm_lines(col = "route_id", lwd = 3, palette = "Set2")
+  # tm_shape(high_lep_routes) + tm_lines(col = "route_id", lwd = 3, palette = "Set2")
