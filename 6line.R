@@ -1,24 +1,3 @@
----
-title: "HUM II Recruitment"
-author: "Ryder Cobean"
-output: 
-  html_document
----
-
-<style>
-.leaflet {
-    margin: auto;
-}
-</style>
-
-This report attempts to answer a number of questions for Humanities II Charter School in The Bronx, New York City.
-
-```{r global_options, include=FALSE}
-knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", echo = F, warning = F, message = F)
-```
-
-```{r, setup, results='hide'}
-
 check.packages <- function(pkg){
   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
   if (length(new.pkg)) 
@@ -30,7 +9,7 @@ check.packages <- function(pkg){
 
 packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp',
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra", 'rmarkdown', "revgeo")
+              'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra", 'rmarkdown', 'revgeo')
 
 check.packages(packages)
 
@@ -72,7 +51,7 @@ nyc_area_zips <-
 
 # get a simple block of NJ coastline to add to baselayers of maps
 nj_land <- nyc_area_zips %>% filter(str_detect(GEOID10, "^07")) %>% st_union
-  
+
 
 # Filter just the ZCTAs we're interested in - Man/Bx
 man_bx_zips <- nyc_area_zips %>% filter(str_detect(GEOID10, "^100|^101|^102|^103|^104"))
@@ -246,7 +225,7 @@ nyc_bus_shelters <-
 # nyc_bus_shelters$location <- str_to_title(nyc_bus_shelters$location, locale = "en")
 
 nyc_bus_shelters %<>% mutate(location = str_to_title(nyc_bus_shelters$location, locale = "en"),
-                            coords = paste(latitude, longitude, sep = ", "))
+                             coords = paste(latitude, longitude, sep = ", "))
 
 
 # NYC Neighborhood Tabulation Areas (NTAs):
@@ -356,76 +335,8 @@ registration_points <- application_points %>%
   dplyr::select(-registration_completed_date) %>% filter(registered == T) %>% 
   dplyr::select(-registered)
 
-```
-
-## Historical Trends in Applications and Registrations
 
 
-## Special Groups Recruitment
-#### Question: If I want to to target and recruit ELL students, where would the most sensible places be to work on targeted recruitment?
-
-One question posed was what strategies could be employed to better target ELL recruitment efforts. 
-This report reviewed the data from NYC's Department of Education on enrollment statistics in `r length(unique(districts_demo_snapshot_1718$school_dist))` districts, focusing on those in Manhattan and The Bronx. 
-
-```{r}
-# Percentile formatting for text below and to set percentile for slicing data below
-schools_percentile <- 0.95
-
-if((schools_percentile * 100) %% 10 == 1) {
-  sch_pctile_ord <- paste(as.character(schools_percentile * 100), "st", sep="")
-} else if ((schools_percentile * 100) %% 10 == 2) {
-  sch_pctile_ord <- paste(as.character(schools_percentile * 100), "nd", sep="")
-} else if ((schools_percentile * 100) %% 10 == 3) {
-  sch_pctile_ord <- paste(as.character(schools_percentile * 100), "rd", sep="")
-} else {
-  sch_pctile_ord <- paste(as.character(schools_percentile * 100), "th", sep="")
-}
-```
-
-Below is the distribution of English Language Learner recruitment among districts and schools in New York, focusing on Manhattan and the Bronx. The second plot highlights those schools recruiting ELL students at the `r paste(sch_pctile_ord)` percentile relative to all schools in New York.
-```{r}
-
-tmap_mode("plot")
-
-plot1 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
-  tm_fill(col = "grey90") + 
-  tm_shape(districts_demo_snapshot_1718, point.per = "feature") + 
-  tm_borders() + 
-  tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
-  tm_text("school_dist") +
-  tm_layout(legend.position = c("left", "top"),
-            title = "Percentage of ELL enrollment by district, 2017-18",
-            title.bg.color = "white", title.bg.alpha = 0.6)
-
-# Plot schools in determined percentile for ELL enrollment in Manhattan and The Bronx:
-high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>% 
-  filter(pct_ell > quantile(.$pct_ell, schools_percentile)) %>% 
-  filter(boro %in% c("X", "M")) %>%
-  .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
-
-plot2 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + 
-  tm_fill(col = "grey90") +
-  tm_shape(nyc_sds) + tm_borders() + tm_fill(alpha = 0) +
-  tm_shape(high_ell_schools_man_bx) + 
-  tm_symbols(col = "red",
-             size = "pct_ell",
-             title.size = "% ELL enrollment",
-             perceptual = T,
-             sizes.legend = c(40,60,80,100), legend.size.is.portrait = F) + 
-  tm_layout(legend.position = c("right", "bottom"),
-            legend.bg.color = "white", legend.bg.alpha = 1, legend.frame = "black",
-            title = paste(sch_pctile_ord, 
-                     "percentile ELL-enrolling schools, Manhattan/Bronx"),
-            title.position = c("center", "top"),
-            title.bg.color = "white", title.bg.alpha = 0.6)
-
-tmap_arrange(plot1, plot2, ncol = 2, asp = 1)
-```
-
-
-#### Limited English Proficiency Households
-One angle for targetting recruitment efforts is examining the distribution of "limited English proficiency" households in New York. The [American Community Survey](https://www.census.gov/programs-surveys/acs/news/data-releases.html?# "American Community Survey 2017 Data Releases") tabulates limited English proficiency households by census tract, which are defined as households that do not solely speak English, in which at least one member is reported by the respondent to speak English "not very well."
-```{r, lep_C16002_setup}
 
 # GET 2017 5YR ACS HOUSEHOLD LANGUAGE SPOKEN BY LIMITED ENGLISH SPEAKING STATUS
 options(tigris_use_cache = TRUE)
@@ -468,8 +379,8 @@ total_lep_by_tract <- lep_hh_by_tract_C16002 %>% as_tibble() %>%
 
 # merge the data back into the geometry
 lep_hh_by_tract_C16002 <- inner_join(lep_hh_by_tract_C16002, 
-                                    total_lep_by_tract, 
-                                    by = c("GEOID" = "GEOID"))
+                                     total_lep_by_tract, 
+                                     by = c("GEOID" = "GEOID"))
 
 # prep for plotting: add school districts for each tract.
 lep_hh_by_tract_C16002 <- st_join(lep_hh_by_tract_C16002, nyc_sds)
@@ -479,18 +390,144 @@ lep_hh_by_tract_C16002_manbx <- filter(lep_hh_by_tract_C16002,
                                        county_name %in% c("New York", "Bronx"))
 
 
-```
-The below interactive map shows the percentage of limited English proficiency households per census tract in NYC, with school district boundaries overlaid. __Note that this calculation has taken out of consideration those tracts with extremely low (first percentile and below) total tract populations.__ While some of those tracts have high proportions of limited English proficiency households, the total number of people living in them is extremely small, and most of them represent land that is largely a park or cemetery.
 
-```{r, LEP_household_proportions_map}
 
-# Plot map of LEP household proportions by tract
+pct <- 0.75
+high_lep_hh_manbx <- 
+  lep_hh_by_tract_C16002_manbx %>% 
+  filter(pct_lep >= quantile(.$pct_lep, pct))
+
+
+
+high_lep_bus_shelters_manbx <- st_intersection(nyc_bus_shelters, high_lep_hh_manbx)
+
+
+
+
+# routes_through_tracts <- st_intersects(nyc_bus_routes, high_lep_hh_manbx)
+routes_through_tracts <- st_intersects(nyc_bus_routes, lep_hh_by_tract_C16002)
+
+st_intersects_tally_attribute <- function(x = NULL, y = NULL, attribute = NULL) {
+  
+  require(sf)
+  
+  a <- attribute
+  
+  # a list of x's length with each record containing a vector of indices of y's
+  # records that intersect with that record in x
+  xy <- st_intersects(x, y) 
+  
+  
+  attr_n <- c() # empty vector to fill
+  for (r in 1:length(xy)) {
+    
+    n <- 0
+    
+    if (length(xy[[r]]) == 0) {
+      
+      n <- 0
+      
+    } else {
+      
+      for (i in 1:length(xy[[r]])) {
+        
+        n <- n + st_drop_geometry(y)[i, a]
+        
+      }
+      
+    }
+    
+    attr_n <- c(attr_n, n)
+    
+  }
+  
+  return(attr_n)
+  
+}
+
+
+st_intersects_tally_attribute(x = nyc_bus_routes, y = lep_hh_by_tract_C16002, attribute = "total_lep")
+
+
+
+
+
+mtcars %>% aggregate(x = ., by = list(gear), FUN = mean(), drop = T)
+
+
+
+nyc_bus_routes %>% group_by(route_id, route_shor, route_long) %>% 
+  summarize() %>% qtm
+
+
+
+
+
+
+
+
+
+
+
+
+snyc_bus_routes_with_lep_hhs <- nyc_bus_routes %>% 
+  mutate(total_lep_passthrough = st_intersects_tally_attribute(., lep_hh_by_tract_C16002, "total_lep"))
+
+nyc_bus_routes_with_lep_hhs %>% top_n(25, total_lep_passthrough) %>% arrange(desc(total_lep_passthrough)) %>% qtm
+
+zz <- c()
+for (r in 1:length(routes_through_tracts)) {
+  aa <- 0
+
+  if (length(routes_through_tracts[[r]]) == 0) {
+    aa <- 0
+  } else {
+    for (i in 1:length(routes_through_tracts[[r]])) {
+      aa <- aa + st_drop_geometry(lep_hh_by_tract_C16002)[i, "total_lep"]
+    }
+  }
+  
+  zz <- c(zz, aa)
+}
+
+
+high_lep_routes <- nyc_bus_routes %>% mutate(lep_hh_passby = zz) %>% top_n(25, lep_hh_passby) %>% arrange(desc(lep_hh_passby))
+
+qtm(high_lep_routes)
+
+high_lep_routes
+
+as_image(high_lep_routes, file = "~/Downloads/routes.png")
+
+
+nyc_bus_routes %>% filter(lengths(st_intersects(nyc_bus_routes, high_lep_hh_manbx)) > 20)
+
+st_intersects(nyc_bus_routes, high_lep_hh_manbx) %>% as_tibble()
+
+
+
+
+tract_indices <- st_intersects(nyc_bus_routes, high_lep_hh_manbx) %>% lengths()
+
+
+st_intersects(nyc_bus_routes, high_lep_hh_manbx)[[39]]
+
+  
+
+nyc_bus_routes %>% mutate(tracts = (st_intersects(., high_lep_hh_manbx)))
+
+
+tracts_along_routes[[]]
+
+
+
 tmap_mode("view")
 tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
-tm_shape(nyc_sds, point.per = "feature", bbox = man_bx_bbox) + 
+  tm_shape(nyc_sds, point.per = "feature", 
+           bbox = st_bbox(filter(high_lep_bus_shelters_manbx, boro_name == "Bronx"))) + 
   tm_borders(alpha = 0.8) + 
   tm_text("school_dist") +
-tm_shape(lep_hh_by_tract_C16002) + 
+  tm_shape(high_lep_hh_manbx) + 
   tm_borders(alpha = 0.2) + 
   tm_fill(col = "pct_lep", 
           palette = "Reds",
@@ -500,97 +537,12 @@ tm_shape(lep_hh_by_tract_C16002) +
           popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
                          "School District"="school_dist",
                          "Total Households"="total_hh",
-                         "% LEP Households"="pct_lep"))
-
-
-# # Hidden: Plot mode available for printed version of report.
-# tmap_mode("plot")
-# tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + tm_fill(col = "grey90") +
-# tm_shape(lep_tracts) +
-#   tm_fill("pct_lep", palette = "Reds", style = "pretty",
-#           title = "% LEP households\nby census Tract") +
-#   tm_borders(alpha = 0.1) +
-#   tm_credits("Source: 2013-2017 ACS Five-Year Estimates",
-#              bg.color = "white", bg.alpha = 0.7, position = c("left", "bottom")) +
-#   tm_layout(legend.position = c("left", "top"),
-#             legend.height = .4,
-#             legend.width = .8,
-#             legend.title.size = 1,
-#             legend.title.fontface = "bold
-```
-
-
-
-```{r }
-pct <- 0.80
-high_lep_hh_manbx <- 
-  lep_hh_by_tract_C16002_manbx %>% 
-  filter(pct_lep >= quantile(.$pct_lep, pct))
-
-
-# Get all bus shelters in NYC that are in pctile-th-percentile tracts by proportion
-# of LEP households
-
-
-# 
-# high_lep_bus_shelters_manbx <- 
-#   nyc_bus_shelters[high_lep_hh_manbx, ]
-
-high_lep_bus_shelters_manbx <- st_intersection(nyc_bus_shelters, high_lep_hh_manbx)
-
-# Prep a version of the dataframe of 
-shelter_table <- high_lep_bus_shelters_manbx %>% as_tibble() %>% 
-  transmute(`Shelter ID` = shelter_id, Coordinates = coords,
-            Address = revgeo(longitude = longitude, latitude = latitude, 
-                             provider = "bing", 
-                             API = Sys.getenv("BING_API_KEY")) %>% as.character(),
-            `Census Tract` = GEOID,
-            `LEP Households` = total_lep) %>% 
-  arrange(desc(`LEP Households`))
-
-```
-The following `r as.character(nrow(high_lep_bus_shelters_manbx))` bus shelters are located in the tracts in Manhattan and the Bronx with the highest (`r as.character(pct * 100)`th percentile) proportions of limited english proficiency. Again, census tracts with extremely low population (often parks, cemeteries and other such areas) have been removed prior to calculation.
-
-
-```{r}
-tmap_mode("view")
-  tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
-  tm_shape(nyc_sds, point.per = "feature", 
-           bbox = st_bbox(filter(high_lep_bus_shelters_manbx, boro_name == "Bronx"))) + 
-    tm_borders(alpha = 0.8) + 
-    tm_text("school_dist") +
-  tm_shape(high_lep_hh_manbx) + 
-    tm_borders(alpha = 0.2) + 
-    tm_fill(col = "pct_lep", 
-            palette = "Reds",
-            title = "% LEP Households",
-            id = "NAME",
-            showNA = F,
-            popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
-                           "School District"="school_dist",
-                           "Total Households"="total_hh",
-                           "% LEP Households"="pct_lep")) +
+                         "% LEP Households"="pct_lep")) +
   tm_shape(high_lep_bus_shelters_manbx) +
-    tm_dots(col = "#42f4e2",
-            id = "shelter_id",
-            popup.vars = c("Location" = "location",
-                           "Coordinates" = "coords",
-                           "Nearby LEP Households" = "total_lep",
-                           "% LEP households in Tract" = "pct_lep"))
-
-```
-\    
-The bus shelters mapped above are available below.
-\  
-
-```{r}
-kable(shelter_table) %>%
-  kable_styling(bootstrap_options = "striped") %>% 
-  scroll_box(height = "300px")
-
-```
-\  
-
-The entire table can be copied and pasted into a spreadsheet and will retain its formatting.
-\  
-
+  tm_dots(col = "#42f4e2",
+          id = "shelter_id",
+          popup.vars = c("Location" = "location",
+                         "Coordinates" = "coords",
+                         "Nearby LEP Households" = "total_lep",
+                         "% LEP households in Tract" = "pct_lep")) + 
+  tm_shape(high_lep_routes) + tm_lines(col = "route_id", lwd = 3, palette = "Set2")
