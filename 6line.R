@@ -192,7 +192,7 @@ ny_water <- tigris::area_water("NY", county = "New York", year = 2017, class = "
 nyc_water <- 
   st_union(c(bx_water$geometry, 
              bk_water$geometry, 
-             qn_water$geometry, 
+             qn_water$gMeeometry, 
              st_water$geometry, 
              ny_water$geometry)) %>%
   st_transform(crs = wgs84_crs)
@@ -219,6 +219,9 @@ unzip("data/downloads/bus_routes_nyc_may2018.zip", exdir = "data/bus_routes", ov
 nyc_bus_routes <- st_read("data/bus_routes/bus_routes_nyc_may2018.shp")
 nyc_bus_routes <- st_transform(nyc_bus_routes, crs = wgs84_crs)
 
+# merge bus routes by route (directions currently their own shapes)
+nyc_bus_routes %<>% group_by(route_id, route_shor, route_long, color) %>% 
+  summarize() %>% ungroup()
 
 
 # NYC bus shelters
@@ -416,7 +419,9 @@ st_intersects_tally_attr <-
            attribute = NULL) {
     require(sf)
     
+    # a <- attribute
     a <- attribute
+    
     
     # a list of x's length with each record containing a vector of indices of y's
     # records that intersect with that record in x
@@ -442,7 +447,8 @@ st_intersects_tally_attr <-
       
     }
     
-    return(attr_n)
+    
+    return(x %>% bind_cols((!!a) := attr_n))
     
   }
 
@@ -453,6 +459,14 @@ manbx_bus_sgbp <- st_intersects(nyc_bus_routes, c(manhattan_sf, bronx_sf))
 manbx_bus_routes <- nyc_bus_routes[lengths(manbx_bus_sgbp) > 0, ]
 rm(manbx_bus_sgbp)  # get rid of helper variable
 
+# Tally the value "total_lep" for its intersects with bus routes passing through
+# tracts with the attribute
+manbx_bus_routes_with_lep <- st_intersects_tally_attr(manbx_bus_routes,
+                                                      lep_hh_by_tract_C16002_manbx,
+                                                      "total_lep")
+
+
+manbx_bus_routes_with_lep
 
 manbx_bus_routes_with_lep <- 
   manbx_bus_routes %>% 

@@ -17,7 +17,7 @@ This report attempts to answer a number of questions for Humanities II Charter S
 knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", echo = F, warning = F, message = F)
 ```
 
-```{r setup, results='hide'}
+```{r, packages, include=F}
 
 check.packages <- function(pkg){
   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
@@ -34,6 +34,11 @@ packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyvers
 
 check.packages(packages)
 
+```
+
+
+
+```{r setup, results='hide', cache=TRUE}
 
 if(!dir.exists("data")) {
   dir.create("data/downloads", recursive = T)
@@ -362,15 +367,18 @@ registration_points <- application_points %>%
   dplyr::select(-registered)
 
 ```
-```{r functions, results='hide'}
 
-st_intersects_tally_attribute <-
+```{r functions, results='hide', cache=T}
+
+st_intersects_tally_attr <-
   function(x = NULL,
            y = NULL,
            attribute = NULL) {
     require(sf)
     
+    # a <- attribute
     a <- attribute
+    
     
     # a list of x's length with each record containing a vector of indices of y's
     # records that intersect with that record in x
@@ -396,7 +404,8 @@ st_intersects_tally_attribute <-
       
     }
     
-    return(attr_n)
+    
+    return(x %>% bind_cols((!!a) := attr_n))
     
   }
 
@@ -567,7 +576,7 @@ tm_shape(lep_hh_by_tract_C16002) +
 
 
 
-```{r }
+```{r, bus_shelters_lep_setup, cache=T, dependson=c("setup", "functions"), include=FALSE}
 pct <- 0.80
 high_lep_hh_manbx <- 
   lep_hh_by_tract_C16002_manbx %>% 
@@ -598,7 +607,7 @@ shelter_table <- high_lep_bus_shelters_manbx %>% as_tibble() %>%
 The following `r as.character(nrow(high_lep_bus_shelters_manbx))` bus shelters are located in the tracts in Manhattan and the Bronx with the highest (`r as.character(pct * 100)`th percentile) proportions of limited english proficiency. Again, census tracts with extremely low population (often parks, cemeteries and other such areas) have been removed prior to calculation.
 
 
-```{r}
+```{r, bus_shelters_lep_plot}
 tmap_mode("view")
   tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
   tm_shape(nyc_sds, point.per = "feature", 
@@ -638,5 +647,64 @@ kable(shelter_table) %>%
 \  
 
 The entire table can be copied and pasted into a spreadsheet and will retain its formatting.
+\  
+
+```{r, bus_routes}
+
+
+# Create a subset of buses that just run in Manhattan and the Bronx
+manbx_bus_sgbp <- st_intersects(nyc_bus_routes, c(manhattan_sf, bronx_sf))
+manbx_bus_routes <- nyc_bus_routes[lengths(manbx_bus_sgbp) > 0, ]
+rm(manbx_bus_sgbp)  # get rid of helper variable
+
+# Tally the value "total_lep" for its intersects with bus routes passing through
+# tracts with the attribute
+manbx_bus_routes_with_lep <- st_intersects_tally_attr(manbx_bus_routes,
+                                                      lep_hh_by_tract_C16002_manbx,
+                                                      "total_lep")
+
+
+
+manbx_bus_routes_with_lep %<>% top_n(15, total_lep) %>% arrange(desc(total_lep))
+
+```
+
+### Bus Routes Along High-LEP Areas
+
+In addition to advertising on the bus stops located within the highest-proportion LEP census tracts in New York, placing advertisements for the school on the bus lines passing near the most LEP households is another strategy. Below are the top `r nrow(manbx_bus_routes_with_lep)` routes in Manhattan and the Bronx, by the number of Low English Proficiency households they pass by (total LEP household counts of the census tracts they pass through):
+
+
+```{r, bus_route_lep_plot}
+
+tmap_mode("view")
+  tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
+  tm_shape(nyc_sds, point.per = "feature", 
+           bbox = st_bbox(filter(high_lep_bus_shelters_manbx, boro_name == "Bronx"))) + 
+    tm_borders(alpha = 0.8) + 
+    tm_text("school_dist") +
+  tm_shape(high_lep_hh_manbx) + 
+    tm_borders(alpha = 0.2) + 
+    tm_fill(col = "pct_lep", 
+            palette = "Reds",
+            title = "% LEP Households",
+            id = "NAME",
+            showNA = F,
+            popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
+                           "School District"="school_dist",
+                           "Total Households"="total_hh",
+                           "% LEP Households"="pct_lep")) +
+  # tm_shape(high_lep_bus_shelters_manbx) +
+  #   tm_dots(col = "#42f4e2",
+  #           id = "shelter_id",
+  #           popup.vars = c("Location" = "location",
+  #                          "Coordinates" = "coords",
+  #                          "Nearby LEP Households" = "total_lep",
+  #                          "% LEP households in Tract" = "pct_lep")) +
+    tm_shape(manbx_bus_routes_with_lep) + 
+    tm_lines(col = "#42f4e2", lwd = 2.5)
+
+```
+\  
+\  
 \  
 
