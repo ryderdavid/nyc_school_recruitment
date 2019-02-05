@@ -466,23 +466,31 @@ manbx_bus_routes_with_lep <- st_intersects_tally_attr(manbx_bus_routes,
                                                       "total_lep")
 
 
-manbx_bus_routes_with_lep
 
-manbx_bus_routes_with_lep <- 
-  manbx_bus_routes %>% 
-  bind_cols(lep_hhs_passby = 
-              st_intersects_tally_attr(manbx_bus_routes, 
-                                       lep_hh_by_tract_C16002_manbx, 
-                                       "total_lep"))
-
-manbx_bus_routes_with_lep %>% top_n(25, lep_hhs_passby)
+manbx_bus_routes_with_lep %>% top_n(25, total_lep) %>% arrange(desc(total_lep))
 
 
 
-manbx_bus_routes_with_lep_hhs <- nyc_bus_routes %>% 
-  bind_cols(total_lep_passthrough = st_intersects_tally_attribute(nyc_bus_routes, 
-                                       lep_hh_by_tract_C16002,
-                                       "total_lep"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -535,6 +543,22 @@ nyc_bus_routes_with_lep_hhs <- nyc_bus_routes %>%
 
 
 
+manbx_bus_routes_with_lep_hhs <- nyc_bus_routes %>% 
+  bind_cols(total_lep_passthrough = st_intersects_tally_attribute(nyc_bus_routes, 
+                                                                  lep_hh_by_tract_C16002,
+                                                                  
+                                                                  manbx_bus_routes_with_lep_hhs <- nyc_bus_routes %>% 
+                                                                    bind_cols(total_lep_passthrough = st_intersects_tally_attribute(nyc_bus_routes, 
+                                                                                                                                    lep_hh_by_tract_C16002,
+                                                                                                                                    
+                                                                                                                                    manbx_bus_routes_with_lep_hhs <- nyc_bus_routes %>% 
+                                                                                                                                      bind_cols(total_lep_passthrough = st_intersects_tally_attribute(nyc_bus_routes, 
+                                                                                                                                                                                                      lep_hh_by_tract_C16002,
+                                                                                                                                                                                                      
+                                                                                                                                                                                                      manbx_bus_routes_with_lep_hhs <- nyc_bus_routes %>% 
+                                                                                                                                                                                                        bind_cols(total_lep_passthrough = st_intersects_tally_attribute(nyc_bus_routes, 
+                                                                                                                                                                                                                                                                        lep_hh_by_tract_C16002,
+                                                                                                                                                                                                                                                                        
 
 
 
