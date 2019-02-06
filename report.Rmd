@@ -18,21 +18,54 @@ knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", echo = F, warning = 
 ```
 
 ```{r setup, results='hide'}
+# 
+# check.packages <- function(pkg){
+#   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+#   if (length(new.pkg)) 
+#     install.packages(new.pkg, dependencies = TRUE, repos = "http://cran.us.r-project.org")
+#   sapply(pkg, require, character.only = TRUE)
+# }
+# 
+# # need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
+# 
+# packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp',
+#               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
+#               'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra", 'rmarkdown', "revgeo")
+# 
+# 
+# check.packages(packages)
+# 
+# 
+# install.packages(c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 
+#                    'tidyverse', 'tigris', 'sp', 'tmap', 'tmaptools', 'readxl', 
+#                    'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 'viridis', 
+#                    'viridisLite', 'rstudioapi', 'magrittr', 'getPass', 
+#                    "kableExtra", 'rmarkdown', "revgeo"))
 
-check.packages <- function(pkg){
-  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-  if (length(new.pkg)) 
-    install.packages(new.pkg, dependencies = TRUE)
-  sapply(pkg, require, character.only = TRUE)
-}
+# sapply(packages, require, character.only = T)
 
-# need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
+library(tidyverse)
+library(sf)
+library(raster)
+library(devtools)
+library(acs)
+library(tidycensus)
+library(tigris)
+library(sp)
+library(tmap)
+library(tmaptools)
+library(readxl)
+library(ggplot2)
+library(rgdal)
+library(spdplyr)
+library(RColorBrewer)
+library(viridis)
+library(viridisLite)
+library(magrittr)
+library(kableExtra)
+library(rmarkdown)
+library(revgeo)
 
-packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp',
-              'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra", 'rmarkdown', "revgeo")
-
-check.packages(packages)
 
 
 if(!dir.exists("data")) {
@@ -42,12 +75,6 @@ if(!dir.exists("data")) {
 }
 
 
-if(Sys.getenv("CENSUS_API_KEY") == "") {
-  
-  census_api_key(getPass("Enter U.S. census API key to install: "), install = T, overwrite = T)
-  readRenviron("~/.Renviron")
-  
-}
 
 
 ##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
@@ -162,7 +189,9 @@ schools_demo_snapshot <- schools_demo_snapshot %>%
 # includes some basic school information such as Name, Address, Principal, and
 # Principal’s contact information.
 
-download.file(url = "https://data.cityofnewyork.us/download/jfju-ynrr/application%2Fzip", destfile = "data/downloads/school_points.zip")
+download.file(url = "https://data.cityofnewyork.us/api/views/jfju-ynrr/files/IjLvNcAZDM01muXoNu_-a2ggw13oNeeV4xH-rPS_Dig?filename=Public_School_Locations.zip",
+              destfile = "data/downloads/school_points.zip")
+
 unzip("data/downloads/school_points.zip", exdir = "data/school_points", overwrite = T)
 
 school_points <- st_read("data/school_points/Public_Schools_Points_2011-2012A.shp")
