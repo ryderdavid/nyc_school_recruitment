@@ -553,6 +553,11 @@ tmap_mode("view")
 tmap_arrange(a2017, a2018, a2019, ncol = 3, sync = T, asp = 1)
 
 ```
+\  
+\    
+\  
+
+
 
 ### Registration Data
 
@@ -583,10 +588,10 @@ tmap_arrange(r2017, r2018, ncol = 2)
 
 ```
 \  
+\  
+\  
 
-#
-\  
-\  
+
 
 ## Special Groups Recruitment
 ### Question: If I want to to target and recruit ELL students, where would the most sensible places be to work on targeted recruitment?
