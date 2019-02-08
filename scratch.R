@@ -1,7 +1,7 @@
 qtm(nyc_hs_zones)
 qtm(nyc_ms_zones)
-
-
+library(tidycensus)
+options(tigris_use_cache = TRUE)
 nyc_demo <- tidycensus::get_acs(geography = "tract", year = 2017, state = "NY",
                                 county = c("New York", "Bronx", "Richmond", "Queens", "Kings"),
                                 geometry = TRUE, 
@@ -49,11 +49,11 @@ tmap_mode("plot")
 tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + tm_fill(col = "grey90") +
 tm_shape(lep_tracts_clipped %>% filter(pct_lep >= lep_percentile)) + tm_fill("pct_lep", palette = "Reds", title = "% LEP") + tm_borders(alpha = 0.3) + 
   tm_layout(legend.position = c("left", "top"), 
-            legend.text.size = 0.6,
+            legend.text.size = 0.7,
             legend.title.fontface = "bold",
-            legend.title.size = 0.6,
-            main.title = "% Limited English Proficiency Households by Census Tract,\n2017 ACS 5-Year Survey",
-            main.title.size = 0.6,
+            legend.title.size = 0.7,
+            main.title = "% Limited English Proficiency Households by Census Tract,\n2017 ACS 5-Year Survey,\n> 85th-percentile households shown",
+            main.title.size = 0.7,
             main.title.fontface = "bold",
             main.title.position = "center")
 
