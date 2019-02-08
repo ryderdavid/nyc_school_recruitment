@@ -509,7 +509,6 @@ regs.2017.tracts  <- points_over_polys(registration_points, nyc_tracts, 2017)
 regs.2018.sd      <- points_over_polys(registration_points, nyc_sds, 2018)
 regs.2018.tracts  <- points_over_polys(registration_points, nyc_tracts, 2018)
 
-
 ```
 
 ### Application Data
