@@ -379,26 +379,39 @@ rm(list = c("sheet_1",
 # studentaddress_zip to zip, then cast year as numeric
 recruitment_data %<>% 
   mutate(enrollment_period = str_sub(enrollment_period, 1, 4)) %>% 
-  rename(year = enrollment_period, zip = studentaddress_zip) %>% 
-  mutate(year = as.numeric(year)) %>% 
+  rename(year = enrollment_period) %>% 
   filter(!is.na(studentaddress_coordinates)) %>% # to remove one pesky record in 2018...
   separate(studentaddress_coordinates, c("lat", "long"), sep = ",") %>% 
-  mutate(long = as.numeric(long), lat = as.numeric(lat))
+  mutate(long = as.numeric(long), lat = as.numeric(lat)) %>% 
+  
+  # convert to sf and intersect with tracts, zips, and ntas shapefiles
+  st_as_sf(coords = c("long", "lat"), 
+           crs    = wgs84_crs) %>% 
+  st_intersection(., nyc_area_zips) %>% 
+  st_intersection(., nyc_ntas) %>% 
+  st_intersection(., nyc_tracts) %>% 
+  
+  # rename and reclass key geography variables
+  mutate(year        = as.numeric(year),
+         district    = as.factor(as.integer(district)),
+         zip         = as.factor(as.integer(GEOID10)),
+         tractname   = as.factor(paste(NAMELSAD, boroname, sep = ", "))) %>% 
+  
+  # add a logical variable for whether applicant was registered or not
+  mutate(registered = ifelse(!is.na(registration_completed_date), T, F))
+
 
 # One hand fix to correct a typo in data entry
-recruitment_data[recruitment_data$zip == "1.047", "zip"] <- "10473"
-
+# recruitment_data[recruitment_data$zip == "1.047", "zip"] <- "10473"
 
 # recruitment data for manhattan and bx only
 recruitment_data_man_bx <- recruitment_data %>% 
-  filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
-
-# convert recruitment_data to simple features file
-recruitment_data <- recruitment_data %>% st_as_sf(coords = c("long", "lat"), crs = wgs84_crs)
+  filter(boroname %in% c("Bronx", "Manhattan"))
+  # filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
 
 # SF of application points
-application_points <- recruitment_data %>% 
-  mutate(registered = ifelse(!is.na(registration_completed_date), T, F))
+application_points <- recruitment_data # %>% 
+  # mutate(registered = ifelse(!is.na(registration_completed_date), T, F))
 
 # SF of registration points - just those that filtered as registered
 registration_points <- application_points %>% 
@@ -449,7 +462,6 @@ st_intersects_tally_attr <-
   }
 
 ```
-
 
 
 ## Historical Recruitment Data {.tabset}
@@ -503,6 +515,8 @@ apps.2018.tracts  <- points_over_polys(application_points, nyc_tracts, 2018)
 apps.2019.sd      <- points_over_polys(application_points, nyc_sds, 2019)
 apps.2019.tracts  <- points_over_polys(application_points, nyc_tracts, 2019)
 
+
+
 regs.2017.sd      <- points_over_polys(registration_points, nyc_sds, 2017)
 regs.2017.tracts  <- points_over_polys(registration_points, nyc_tracts, 2017)
 
@@ -553,9 +567,8 @@ tmap_arrange(a2017, a2018, a2019, ncol = 3, sync = T, asp = 1)
 
 ```
 \  
-\    
+Above is the distribution of applications received, aggregated by census tract. 
 \  
-
 
 
 ### Registration Data
@@ -568,8 +581,8 @@ r2017 <-
   tm_borders(alpha = 0.5) + 
   tm_fill(col = "n",
           title = "Registrations 2017",
-          style = "pretty",
-          popup.vars = c("Applications"="n")) + 
+          popup.vars = c("Applications"="n"),
+          legend.format = ) + 
   tm_view(set.view = c(-73.86652, 40.85263, 11))
   
 r2018 <- 
@@ -583,13 +596,35 @@ r2018 <-
   tm_view(set.view = c(-73.86652, 40.85263, 11))
 
 tmap_mode("view")
-tmap_arrange(r2017, r2018, ncol = 2)
+tmap_arrange(r2017, r2018, ncol = 2, sync = T)
 
 ```
 \  
-\  
+Above is the distribution of students registered, aggregated by census tract. 
 \  
 
+```{r}
+
+xx <- apps.2017.sd %>% filter(.$n > median(apps.2017.sd$n))
+
+xx
+
+
+ggplot(apps.2017.sd) + geom_bar(aes(x = school_dist, y = n), stat = "identity")
+```
+
+
+
+
+
+
+
+
+### Application to Registration Performance
+
+```{r app_reg_performance}
+
+```
 
 
 ## Special Groups Recruitment
@@ -613,8 +648,10 @@ if((schools_percentile * 100) %% 10 == 1) {
 }
 ```
 
+
 ### Limited English Proficiency Households
 Below is the distribution of English Language Learner recruitment among districts and schools in New York, focusing on Manhattan and the Bronx. The second plot highlights those schools recruiting ELL students at the `r paste(sch_pctile_ord)` percentile relative to all schools in New York.
+
 ```{r}
 
 tmap_mode("plot")
