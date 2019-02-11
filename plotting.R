@@ -14,6 +14,18 @@ recdata <- application_points %>%
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 plot.applications <- 
   function(data = application_points, 
            year.min = -Inf, 
@@ -40,8 +52,6 @@ plot.applications <-
     } else { 
       yr.max <- year.max 
     }
-    
-    
     
     
     d.counts <- d %>%  

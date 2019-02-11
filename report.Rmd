@@ -13,28 +13,8 @@ output:
 
 This report attempts to answer a number of questions for Humanities II Charter School in The Bronx, New York City.
 
-```{r global_options, include=FALSE}
+```{r setup, include=FALSE}
 knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", echo = F, warning = F, message = F)
-```
-
-```{r, packages, include=F}
-
-# check.packages <- function(pkg){
-#   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-#   if (length(new.pkg)) 
-#     install.packages(new.pkg, dependencies = TRUE)
-#   sapply(pkg, require, character.only = TRUE)
-# }
-# 
-# # need local package gdal, units (udunits on arch), v8-3.14 (source on AUR), gcc-fortran, unixodbc
-# 
-# packages <- c('here', 'sf', 'raster', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp',
-#               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-#               'viridis', 'viridisLite', 'rstudioapi', 'magrittr', 'getPass', "kableExtra", 'rmarkdown', "revgeo")
-# 
-# check.packages(packages)
-# 
-
 
 library(sf)
 library(leaflet)
@@ -55,13 +35,10 @@ library(acs)
 library(devtools)
 library(raster)
 library(tidyverse)
-
-
 ```
 
 
-
-```{r setup, results='hide', cache=TRUE}
+```{r data_prep, results='hide', cache=F}
 
 if(!dir.exists("data")) {
   dir.create("data/downloads", recursive = T)
@@ -119,12 +96,10 @@ man_bx_zips <- nyc_area_zips %>% filter(str_detect(GEOID10, "^100|^101|^102|^103
 # them as factors which breaks all attempts at analysis. forcing NOT to factors
 # brings everything in as characters, which lets us cast each attribute to
 # numeric
-nyc_sds <- st_read("https://data.cityofnewyork.us/resource/cuae-wd7h.geojson", 
-                   stringsAsFactors = F) %>% 
+nyc_sds <- st_read("https://data.cityofnewyork.us/resource/cuae-wd7h.geojson", stringsAsFactors = F) %>% 
   st_transform(crs = wgs84_crs) %>% 
-  mutate(school_dist = as.numeric(school_dist), 
-         shape_area = as.numeric(shape_area),
-         shape_leng = as.numeric(shape_leng)) %>% 
+  select(-shape_area, -shape_leng) %>% 
+  mutate(school_dist = as.integer(school_dist)) %>% 
   group_by(school_dist) %>% 
   summarize()
 
@@ -257,8 +232,20 @@ trct <-
                             'Queens',
                             'Richmond')) %>% 
   as("sf") %>%  # cast to sf
-  st_transform(crs=wgs84_crs)  # apply common CRS
-
+  st_transform(crs=wgs84_crs) %>% 
+  
+  # make easier to work with with county name
+  mutate(countyname = recode(.$COUNTYFP, 
+                             `005`="Bronx", 
+                             `047`="Kings", 
+                             `061`="New York", 
+                             `081`="Queens", 
+                             `085`="Richmond")) %>% 
+  
+  mutate(tractname = paste(NAMELSAD, ", ",
+                           countyname,
+                           " County",
+                           sep = ""))
 
 nyc_tracts <- st_erase(trct, nyc_water) # erase water from edges 
 
@@ -390,11 +377,12 @@ recruitment_data %<>%
   st_intersection(., nyc_area_zips) %>% 
   st_intersection(., nyc_ntas) %>% 
   st_intersection(., nyc_tracts) %>% 
+  st_intersection(., nyc_sds) %>% 
   
   # rename and reclass key geography variables
-  mutate(year        = as.numeric(year),
-         district    = as.factor(as.integer(district)),
-         zip         = as.factor(as.integer(GEOID10)),
+  mutate(year        = as.integer(year),
+         district    = as.integer(district),
+         zip         = as.integer(GEOID10),
          tractname   = as.factor(paste(NAMELSAD, boroname, sep = ", "))) %>% 
   
   # add a logical variable for whether applicant was registered or not
@@ -466,104 +454,107 @@ st_intersects_tally_attr <-
 
 ## Historical Recruitment Data {.tabset}
 
-```{r results='hide'}
-points_over_polys <- function (points = NULL, polys = NULL, year = NULL) {
-  
+```{r historical_recruitment}
+
+# identify which points intersect with which polygons, flatten those to a
+# count by applying length() to each list item, and bind the result of that
+# as a column to the original polygon shapefile
+counts_by_geog <- function (points = NULL, geography = NULL, yearmin = 0, yearmax = 10000) {
+
   require(sf)
   require(tidyverse)
   require(tmap)
   require(tmaptools)
-  
-  pols = polys
-  yr = year
-  pts <- points %>% filter(year %in% yr) %>% select(year)
-  p <- palette
-    
 
-  # yr <-  2017
-  # pts <-  application_points %>% filter(year %in% yr) %>% select(year)
-  # pols <- nyc_sds
-  # p <- "Reds"
+  geog <- geography
+  yr <- seq(yearmin, yearmax)
+  pts <- points %>% filter(year %in% yr)
+
+  ret <-
+    geog %>% st_covers(., pts) %>%
+    lengths() %>% 
+    bind_cols(geog, n=.) %>%
+    filter(n > 0) %>% 
+    mutate(pct = n / sum(n) * 100)
+
   
-  # pols <- nyc_tracts
-  
-  #  identify which points intersect with which polygons, flatten those to a
-  #  count by applying length() to each list item, and bind the result of that
-  #  as a column to the original polygon shapefile
-  merge <- 
-    pols %>% st_intersects(., pts) %>% 
-    sapply(length) %>% 
-    bind_cols(pols, n=.) %>% 
-    filter(n > 0)
-  
-  # tmap_mode("view")
-  # tm_shape(merge, point.per = "feature") +
-  #   tm_borders(alpha = 0.2) + 
-  #   tm_fill(col = "n", palette = p) -> tx
-  
-  return(merge)
-  
+  return(ret)
+
 }
 
 
-apps.2017.sd      <- points_over_polys(application_points, nyc_sds, 2017)
-apps.2017.tracts  <- points_over_polys(application_points, nyc_tracts, 2017)
-
-apps.2018.sd      <- points_over_polys(application_points, nyc_sds, 2018)
-apps.2018.tracts  <- points_over_polys(application_points, nyc_tracts, 2018)
-
-apps.2019.sd      <- points_over_polys(application_points, nyc_sds, 2019)
-apps.2019.tracts  <- points_over_polys(application_points, nyc_tracts, 2019)
 
 
 
-regs.2017.sd      <- points_over_polys(registration_points, nyc_sds, 2017)
-regs.2017.tracts  <- points_over_polys(registration_points, nyc_tracts, 2017)
 
-regs.2018.sd      <- points_over_polys(registration_points, nyc_sds, 2018)
-regs.2018.tracts  <- points_over_polys(registration_points, nyc_tracts, 2018)
+apps.2017.sd <- counts_by_geog(application_points, nyc_sds, 2017, 2017)
+apps.2017.ntas <- counts_by_geog(application_points, nyc_ntas, 2017, 2017)
+apps.2017.tracts <- counts_by_geog(application_points, nyc_tracts, 2017, 2017)
+
+apps.2018.sd <- counts_by_geog(application_points, nyc_sds, 2018, 2018)
+apps.2018.tracts <- counts_by_geog(application_points, nyc_tracts, 2018, 2018)
+
+apps.2019.sd <- counts_by_geog(application_points, nyc_sds, 2019, 2019)
+apps.2019.tracts <- counts_by_geog(application_points, nyc_tracts, 2019, 2019)
+
+regs.2017.tracts <- counts_by_geog(registration_points, nyc_tracts, 2017, 2017)
+regs.2018.tracts <- counts_by_geog(registration_points, nyc_tracts, 2018, 2018)
+
+
+apps.tracts <- counts_by_geog(recruitment_data, nyc_tracts)
+
 
 ```
 
 ### Application Data
 
-```{r, applications_plot}
-a2017 <- 
+```{r applications_plot}
+
+a2017.tracts <- 
   tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
   tm_shape(apps.2017.tracts) + 
   tm_borders(alpha = 0.5) + 
   tm_fill(col = "n",
-          title = "Applications 2017",
-          id="NAMELSAD",
-          popup.vars = c("Applications"="n")) + 
-  tm_view(set.view = c(-73.86652, 40.85263, 11))
+          id="tractname",
+          title = "Applications",
+          popup.vars = c("Applications"="n",
+                         "Percent of Total"="pct")) + 
+  tm_view(set.view = c(-73.86652, 40.85263, 11),
+          set.zoom.limits = c(11,14)) +
+  tm_layout(title = "2017")
   
-a2018 <- 
+a2018.tracts <- 
   tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
   tm_shape(apps.2018.tracts) + 
   tm_borders(alpha = 0.5) + 
   tm_fill(col = "n",
-          id="NAMELSAD",
+          id="tractname",
+          title = "Applications",
           palette = "Greens",
-          title = "Applications 2018",
-          popup.vars = c("Applications"="n")) + 
-  tm_view(set.view = c(-73.86652, 40.85263, 11))
+          popup.vars = c("Applications"="n",
+                         "Percent of Total"="pct")) + 
+  tm_view(set.view = c(-73.86652, 40.85263, 11),
+          set.zoom.limits = c(11,14)) +
+  tm_layout(title = "2018")
 
-a2019 <- 
+a2019.tracts <- 
   tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
   tm_shape(apps.2019.tracts) + 
   tm_borders(alpha = 0.5) + 
   tm_fill(col = "n",
-          id="NAMELSAD",
+          id="tractname",
+          title = "Applications",
           palette = "Reds",
-          title = "Applications 2019",
-          popup.vars = c("Applications"="n")) + 
-  tm_view(set.view = c(-73.86652, 40.85263, 11))
+          popup.vars = c("Applications"="n",
+                         "Percent of Total"="pct")) + 
+  tm_view(set.view = c(-73.86652, 40.85263, 11),
+          set.zoom.limits = c(11,14)) +
+  tm_layout(title = "2019")
 
 
 
 tmap_mode("view")
-tmap_arrange(a2017, a2018, a2019, ncol = 3, sync = T, asp = 1)
+tmap_arrange(a2017.tracts, a2018.tracts, a2019.tracts, ncol = 3, sync = T, asp = 1)
 
 ```
 \  
@@ -573,52 +564,38 @@ Above is the distribution of applications received, aggregated by census tract.
 
 ### Registration Data
 
-```{r, registrations_plot}
+```{r registrations_plot}
 
-r2017 <- 
+r2017.tracts <- 
   tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
   tm_shape(regs.2017.tracts) + 
   tm_borders(alpha = 0.5) + 
-  tm_fill(col = "n",
-          title = "Registrations 2017",
-          popup.vars = c("Applications"="n"),
-          legend.format = ) + 
-  tm_view(set.view = c(-73.86652, 40.85263, 11))
+  tm_fill(col           = "n",
+          id            = "tractname",
+          title         = "Registrationss",
+          popup.vars    = c("Registrations"="n")) + 
+  tm_view(set.view = c(-73.86652, 40.85263, 11)) +
+  tm_layout(title = "2017")
   
-r2018 <- 
+r2018.tracts <- 
   tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
   tm_shape(regs.2018.tracts) + 
   tm_borders(alpha = 0.5) + 
-  tm_fill(col = "n",
-          palette = "Greens",
-          title = "Registrations 2018",
-          popup.vars = c("Applications"="n")) + 
-  tm_view(set.view = c(-73.86652, 40.85263, 11))
+  tm_fill(col           = "n",
+          id            = "tractname",
+          palette       = "Greens",
+          title         = "Registrations",
+          popup.vars    = c("Registrations"="n")) + 
+  tm_view(set.view      = c(-73.86652, 40.85263, 11)) +
+  tm_layout(title = "2018")
 
 tmap_mode("view")
-tmap_arrange(r2017, r2018, ncol = 2, sync = T)
+tmap_arrange(r2017.tracts, r2018.tracts, ncol = 2, sync = T)
 
 ```
 \  
 Above is the distribution of students registered, aggregated by census tract. 
 \  
-
-```{r}
-
-xx <- apps.2017.sd %>% filter(.$n > median(apps.2017.sd$n))
-
-xx
-
-
-ggplot(apps.2017.sd) + geom_bar(aes(x = school_dist, y = n), stat = "identity")
-```
-
-
-
-
-
-
-
 
 ### Application to Registration Performance
 
@@ -925,7 +902,7 @@ tmap_mode("view")
                           "# LEP Households: " = "total_lep")) +
     
   #  Focus view to the center of the Bronx, set zoom to fill view with Bronx
-  tm_view(set.view=c(st_centroid(bronx_sf)[[1]] %>% as.numeric(), 12),
+  tm_view(set.view=c(-73.88251, 40.83489, 12),
           set.zoom.limits = c(11, 15))
 
   
