@@ -13,15 +13,43 @@ recdata <- application_points %>%
 
 
 
+apps_2017_dist  <- apps_by_geography(geography = "district", year.min = 2017, year.max = 2017)
+apps_2018_dist  <- apps_by_geography(geography = "district", year.min = 2018, year.max = 2018)
+apps_2019_dist  <- apps_by_geography(geography = "district", year.min = 2019, year.max = 2019)
+apps_allyr_dist <- apps_by_geography(geography = "district")
+
+
+apps_barplot <- function(data = NULL) {
+  
+  d <-  data
+  
+  if (d$year %>% unique() %>% length > 1) {
+    sub_title <- paste("School Years Beginning ", 
+                       min(d$year), " through ", 
+                       max(d$year), 
+                       sep = "")
+  } else {
+    sub_title <- paste(d$year, "-", (d$year + 1),
+                       " School Year", sep = "")
+  }
+  
+  
+  ggplot(d) + 
+    geom_bar(aes(x = school_dist, y = n, fill = registered),
+             stat = "identity") +
+    ggtitle("Applications and Registrations, by Applicant's School District",
+            subtitle = sub_title) + 
+    theme(plot.title    = element_text(hjust = 0.5),
+          plot.subtitle = element_text(hjust = 0.5),
+          legend.position = "bottom") +
+    xlab("School District (NA = Out of Town Application)") +
+    ylab("Count")
+  
+}
 
 
 
-
-
-
-
-
-
+apps_barplot(apps_allyr_dist) + scale_fill_brewer(palette = "Dark2")
 
 
 

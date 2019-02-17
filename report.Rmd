@@ -100,6 +100,7 @@ nyc_sds <- st_read("https://data.cityofnewyork.us/resource/cuae-wd7h.geojson", s
   st_transform(crs = wgs84_crs) %>% 
   select(-shape_area, -shape_leng) %>% 
   mutate(school_dist = as.integer(school_dist)) %>% 
+  # mutate(school_dist = as.factor(school_dist)) %>% 
   group_by(school_dist) %>% 
   summarize()
 
@@ -107,56 +108,31 @@ nyc_sds <- st_read("https://data.cityofnewyork.us/resource/cuae-wd7h.geojson", s
 
 
 districts_demo_snapshot <- 
-  read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv")
-
-
-
-names(districts_demo_snapshot) %<>% 
-  str_to_lower() %>% 
-  str_replace_all("\\s", "_") %>% 
-  str_replace_all("#", "num") %>% 
-  str_replace_all("%", "pct") %>% 
-  str_replace_all("\\(|\\)", "") %>% 
-  str_replace_all("\\&", "") %>% 
-  str_replace_all("_{2,}", "_")
-
-districts_demo_snapshot <- districts_demo_snapshot %>% 
+  read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv") %>% 
+  rename_all(
+    funs(
+      str_to_lower(.) %>% 
+      str_replace_all(., "\\s", "_") %>% 
+      str_replace_all(., "#", "num") %>% 
+      str_replace_all(., "%", "pct") %>% 
+      str_replace_all(., "\\(|\\)", "") %>% 
+      str_replace_all(., "\\&", "") %>% 
+      str_replace_all(., "_{2,}", "_")
+    )
+  ) %>% 
+  mutate(administrative_district = as.integer(administrative_district)) %>% 
+  # mutate(administrative_district = as.factor(administrative_district)) %>% 
   rename(num_swd = students_with_disabilities_1, 
          pct_swd = students_with_disabilities_2,
          num_ell = english_language_learners_1, 
          pct_ell = english_language_learners_2, 
          num_pov = poverty_1, 
-         pct_pov = poverty_2)
-
-
+         pct_pov = poverty_2) %>% 
+  inner_join(nyc_sds, ., 
+             by = c("school_dist" = "administrative_district"))
 
 districts_demo_snapshot_1718 <- districts_demo_snapshot %>% 
   filter(year == "2017-18")
-
-districts_demo_snapshot_1718 <- 
-  inner_join(nyc_sds, districts_demo_snapshot, 
-             by = c("school_dist" = "administrative_district"))
-
-
-
-
-
-schools_demo_snapshot <- 
-  read_csv("https://data.cityofnewyork.us/api/views/s52a-8aq6/rows.csv?accessType=DOWNLOAD&bom=true&format=true")
-
-names(schools_demo_snapshot) %<>% 
-  str_to_lower() %>% 
-  str_replace_all("\\s", "_") %>% 
-  str_replace_all("#", "num") %>% 
-  str_replace_all("%", "pct") %>% 
-  str_replace_all("\\(|\\)", "") %>% 
-  str_replace_all("\\&", "") %>% 
-  str_replace_all("_{2,}", "_")
-
-schools_demo_snapshot <- schools_demo_snapshot %>% 
-  rename(num_swd = num_students_with_disabilities, pct_swd = pct_students_with_disabilities,
-         num_ell = num_english_language_learners, pct_ell = pct_english_language_learners,
-         num_pov = num_poverty, pct_pov = pct_poverty)
 
 
 # Shapefile of public school points - This is an ESRI shape file of school point
@@ -168,34 +144,37 @@ schools_demo_snapshot <- schools_demo_snapshot %>%
 download.file(url = "https://data.cityofnewyork.us/download/jfju-ynrr/application%2Fzip", destfile = "data/downloads/school_points.zip")
 unzip("data/downloads/school_points.zip", exdir = "data/school_points", overwrite = T)
 
-school_points <- st_read("data/school_points/Public_Schools_Points_2011-2012A.shp")
+school_points <- st_read("data/school_points/Public_Schools_Points_2011-2012A.shp") %>% 
+  rename_all(str_to_lower) %>% 
+  # clean up trailing unicode characters in ats_code
+  mutate(ats_code = str_sub(ats_code, 1, 6)) %>% 
+  mutate(principal = str_to_title(principal, locale = "en")) %>% 
+  st_transform(school_points, crs = wgs84_crs)
 
-names(school_points) %<>% 
-  str_to_lower()
-
-
-# clean up trailing unicode characters in ats_code
-school_points$ats_code %<>% str_sub(1,6)
-
-school_points <- st_transform(school_points, crs = wgs84_crs)
-
-# add point geometry to school demographic data
-schools_demo_snapshot <- inner_join(schools_demo_snapshot, school_points, by = c("dbn" = "ats_code")) %>% st_as_sf()
-
+# School demographic data from NYC gov't. Will merge with above points data.
+schools_demo_snapshot <- 
+  read_csv("https://data.cityofnewyork.us/api/views/s52a-8aq6/rows.csv?accessType=DOWNLOAD&bom=true&format=true") %>% 
+  rename_all(
+    funs(
+      str_to_lower(.) %>% 
+      str_replace_all(., "\\s", "_") %>% 
+      str_replace_all(., "#", "num") %>% 
+      str_replace_all(., "%", "pct") %>% 
+      str_replace_all(., "\\(|\\)", "") %>% 
+      str_replace_all(., "\\&", "") %>% 
+      str_replace_all(., "_{2,}", "_")
+    )
+  ) %>% 
+  rename(num_swd = num_students_with_disabilities, 
+         pct_swd = pct_students_with_disabilities,
+         num_ell = num_english_language_learners, 
+         pct_ell = pct_english_language_learners,
+         num_pov = num_poverty, 
+         pct_pov = pct_poverty) %>% 
+  inner_join(school_points, ., by = c('ats_code' = 'dbn'))
+  
 # filter out old years of schools demo snapshot
 schools_demo_snapshot_1718 <- schools_demo_snapshot %>% filter(year == "2017-18")
-
-
-# Get census tract shapefiles
-
-# NYC tracts clipped to shoreline available here: 
-# https://www1.nyc.gov/site/planning/data-maps/open-data/districts-download-metadata.page
-# nyc_tracts <- 
-#   st_read("http://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/nyct2010/FeatureServer/0/query?where=1=1&outFields=*&outSR=4326&f=geojson")
-# 
-# 
-# nyc_tracts <- nyc_tracts %>% st_transform(crs = wgs84_crs)
-
 
 
 
@@ -410,6 +389,7 @@ registration_points <- application_points %>%
 
 ```{r functions, results='hide', cache=T}
 
+# This might be ready for deletion -- possibly unused
 st_intersects_tally_attr <-
   function(x = NULL,
            y = NULL,
@@ -449,60 +429,40 @@ st_intersects_tally_attr <-
     
   }
 
+
+
+
 ```
 
 
-## Historical Recruitment Data {.tabset}
+## Historical Recruitment Data 
 
 ```{r historical_recruitment}
 
-# identify which points intersect with which polygons, flatten those to a
-# count by applying length() to each list item, and bind the result of that
-# as a column to the original polygon shapefile
-counts_by_geog <- function (points = NULL, geography = NULL, yearmin = 0, yearmax = 10000) {
-
-  require(sf)
-  require(tidyverse)
-  require(tmap)
-  require(tmaptools)
-
-  geog <- geography
-  yr <- seq(yearmin, yearmax)
-  pts <- points %>% filter(year %in% yr)
-
-  ret <-
-    geog %>% st_covers(., pts) %>%
-    lengths() %>% 
-    bind_cols(geog, n=.) %>%
-    filter(n > 0) %>% 
-    mutate(pct = n / sum(n) * 100)
-
-  
-  return(ret)
-
-}
+# create a tidy set of application totals of this with all years
+recruitment_by_tract_tidy <- 
+  recruitment_data %>% 
+  st_drop_geometry() %>% 
+  count(GEOID, year, registered) %>% 
+  complete(GEOID, year, registered, fill = list(n = 0)) %>% 
+  mutate(pct_total = n / sum(n) * 100) %>% 
+  group_by(year) %>% 
+  mutate(pct_yr = n / sum(n) * 100) %>% 
+  ungroup() %>% 
+  inner_join(nyc_tracts, ., by = c("GEOID" = "GEOID"))
 
 
 
-
-
-
-apps.2017.sd <- counts_by_geog(application_points, nyc_sds, 2017, 2017)
-apps.2017.ntas <- counts_by_geog(application_points, nyc_ntas, 2017, 2017)
-apps.2017.tracts <- counts_by_geog(application_points, nyc_tracts, 2017, 2017)
-
-apps.2018.sd <- counts_by_geog(application_points, nyc_sds, 2018, 2018)
-apps.2018.tracts <- counts_by_geog(application_points, nyc_tracts, 2018, 2018)
-
-apps.2019.sd <- counts_by_geog(application_points, nyc_sds, 2019, 2019)
-apps.2019.tracts <- counts_by_geog(application_points, nyc_tracts, 2019, 2019)
-
-regs.2017.tracts <- counts_by_geog(registration_points, nyc_tracts, 2017, 2017)
-regs.2018.tracts <- counts_by_geog(registration_points, nyc_tracts, 2018, 2018)
-
-
-apps.tracts <- counts_by_geog(recruitment_data, nyc_tracts)
-
+recruitment_by_sd_tidy <- 
+  recruitment_data %>% 
+  st_drop_geometry %>% 
+  count(school_dist, year, registered) %>% 
+  complete(school_dist, year, registered, fill = list(n = 0)) %>% 
+  mutate(pct_total = n / sum(n)) %>% 
+  group_by(year) %>% 
+  mutate(pct_yr = n / sum(n) * 100) %>% 
+  ungroup() %>% 
+  inner_join(nyc_sds, ., by = c("school_dist" = "school_dist"))
 
 ```
 
@@ -510,51 +470,40 @@ apps.tracts <- counts_by_geog(recruitment_data, nyc_tracts)
 
 ```{r applications_plot}
 
-a2017.tracts <- 
-  tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
-  tm_shape(apps.2017.tracts) + 
-  tm_borders(alpha = 0.5) + 
-  tm_fill(col = "n",
-          id="tractname",
-          title = "Applications",
-          popup.vars = c("Applications"="n",
-                         "Percent of Total"="pct")) + 
-  tm_view(set.view = c(-73.86652, 40.85263, 11),
-          set.zoom.limits = c(11,14)) +
-  tm_layout(title = "2017")
-  
-a2018.tracts <- 
-  tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
-  tm_shape(apps.2018.tracts) + 
-  tm_borders(alpha = 0.5) + 
-  tm_fill(col = "n",
-          id="tractname",
-          title = "Applications",
-          palette = "Greens",
-          popup.vars = c("Applications"="n",
-                         "Percent of Total"="pct")) + 
-  tm_view(set.view = c(-73.86652, 40.85263, 11),
-          set.zoom.limits = c(11,14)) +
-  tm_layout(title = "2018")
-
-a2019.tracts <- 
-  tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
-  tm_shape(apps.2019.tracts) + 
-  tm_borders(alpha = 0.5) + 
-  tm_fill(col = "n",
-          id="tractname",
-          title = "Applications",
-          palette = "Reds",
-          popup.vars = c("Applications"="n",
-                         "Percent of Total"="pct")) + 
-  tm_view(set.view = c(-73.86652, 40.85263, 11),
-          set.zoom.limits = c(11,14)) +
-  tm_layout(title = "2019")
-
-
+applications_by_tract_yearly_totals <- 
+  recruitment_by_tract_tidy %>% 
+  group_by(GEOID, tractname, year) %>% 
+  summarize(n = sum(n)) %>% 
+  group_by(year) %>% 
+  mutate(pct_yr = n / sum(n) * 100) %>% 
+  ungroup() %>% 
+  mutate(pct_total = n / sum(n) * 100) %>% 
+  filter(n > 0)
 
 tmap_mode("view")
-tmap_arrange(a2017.tracts, a2018.tracts, a2019.tracts, ncol = 3, sync = T, asp = 1)
+
+
+tm_tiles(providers$CartoDB.PositronNoLabels) + 
+tm_shape(nyc_sds, point.per = "feature") +
+  tm_borders(alpha = 0.7) +
+  tm_text(text = "school_dist") +
+tm_shape(applications_by_tract_yearly_totals) + 
+  tm_borders(alpha = 0.2) + 
+  tm_facets(by="year", 
+            sync = T,
+            ncol = 3,
+            nrow = 1) +
+  tm_fill(col = "n",
+        id="tractname",
+        style = "jenks",
+        title = "Applications",
+        popup.vars = c("Applications"="n",
+                       "% of Year's Applications"="pct_yr")) +
+  tm_view(set.view = c(-73.86652, 40.85263, 11),
+        set.zoom.limits = c(11,14)) + 
+  tm_layout(panel.show = F)
+
+
 
 ```
 \  
@@ -566,31 +515,30 @@ Above is the distribution of applications received, aggregated by census tract.
 
 ```{r registrations_plot}
 
-r2017.tracts <- 
-  tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
-  tm_shape(regs.2017.tracts) + 
-  tm_borders(alpha = 0.5) + 
-  tm_fill(col           = "n",
-          id            = "tractname",
-          title         = "Registrationss",
-          popup.vars    = c("Registrations"="n")) + 
-  tm_view(set.view = c(-73.86652, 40.85263, 11)) +
-  tm_layout(title = "2017")
-  
-r2018.tracts <- 
-  tm_tiles(leaflet::providers$CartoDB.PositronNoLabels) + 
-  tm_shape(regs.2018.tracts) + 
-  tm_borders(alpha = 0.5) + 
-  tm_fill(col           = "n",
-          id            = "tractname",
-          palette       = "Greens",
-          title         = "Registrations",
-          popup.vars    = c("Registrations"="n")) + 
-  tm_view(set.view      = c(-73.86652, 40.85263, 11)) +
-  tm_layout(title = "2018")
+registrations_by_tract_yearly_totals <-
+  recruitment_by_tract_tidy %>%
+  filter(registered == T, n > 0)
 
-tmap_mode("view")
-tmap_arrange(r2017.tracts, r2018.tracts, ncol = 2, sync = T)
+tm_tiles(providers$CartoDB.PositronNoLabels) +
+tm_shape(nyc_sds, point.per = "feature") +
+  tm_borders(alpha = 0.5) +
+  tm_text(text = "school_dist") +
+tm_shape(registrations_by_tract_yearly_totals) +
+  tm_borders(alpha = 0.2) +
+  tm_facets(by="year",
+            sync = T,
+            nrow = 1,
+            ncol = 2) +
+  tm_fill(col = "n",
+          palette = "BuGn",
+          id="tractname",
+          style = "pretty",
+          title = "Registrations",
+          popup.vars = c("Registrations"="n",
+                         "% of Year's Registrations"="pct_yr")) +
+  tm_view(set.view = c(-73.86652, 40.85263, 11),
+        set.zoom.limits = c(11,14)) +
+  tm_layout(panel.show = F)
 
 ```
 \  
@@ -600,6 +548,22 @@ Above is the distribution of students registered, aggregated by census tract.
 ### Application to Registration Performance
 
 ```{r app_reg_performance}
+
+
+ggplot(recruitment_by_sd_tidy %>% 
+         mutate(school_dist = as.factor(school_dist))) + 
+  geom_bar(aes(x = school_dist, y = n, fill = registered), stat = "identity") +
+  ggtitle("Recruitment Performance by Applicant's School District", 
+          subtitle = "School Years Beginning 2017 through 2019") +
+  theme(plot.title      = element_text(hjust = 0.5),
+        plot.subtitle   = element_text(hjust = 0.5),
+        legend.position = "bottom") +
+  xlab("School District") + 
+  ylab("Count") +
+  facet_grid(year ~ .)
+
+
+
 
 ```
 
@@ -631,41 +595,41 @@ Below is the distribution of English Language Learner recruitment among district
 
 ```{r}
 
-tmap_mode("plot")
-
-plot1 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
-  tm_fill(col = "grey90") + 
-  tm_shape(districts_demo_snapshot_1718, point.per = "feature") + 
-  tm_borders() + 
-  tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
-  tm_text("school_dist") +
-  tm_layout(legend.position = c("left", "top"),
-            title = "Percentage of ELL enrollment by district, 2017-18",
-            title.bg.color = "white", title.bg.alpha = 0.6)
-
-# Plot schools in determined percentile for ELL enrollment in Manhattan and The Bronx:
-high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>% 
-  filter(pct_ell > quantile(.$pct_ell, schools_percentile)) %>% 
-  filter(boro %in% c("X", "M")) %>%
-  .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
-
-plot2 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + 
-  tm_fill(col = "grey90") +
-  tm_shape(nyc_sds) + tm_borders() + tm_fill(alpha = 0) +
-  tm_shape(high_ell_schools_man_bx) + 
-  tm_symbols(col = "red",
-             size = "pct_ell",
-             title.size = "% ELL enrollment",
-             perceptual = T,
-             sizes.legend = c(40,60,80,100), legend.size.is.portrait = F) + 
-  tm_layout(legend.position = c("right", "bottom"),
-            legend.bg.color = "white", legend.bg.alpha = 1, legend.frame = "black",
-            title = paste(sch_pctile_ord, 
-                     "percentile ELL-enrolling schools, Manhattan/Bronx"),
-            title.position = c("center", "top"),
-            title.bg.color = "white", title.bg.alpha = 0.6)
-
-tmap_arrange(plot1, plot2, ncol = 2, asp = 1)
+# tmap_mode("plot")
+# 
+# plot1 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
+#   tm_fill(col = "grey90") + 
+#   tm_shape(districts_demo_snapshot_1718, point.per = "feature") + 
+#   tm_borders() + 
+#   tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
+#   tm_text("school_dist") +
+#   tm_layout(legend.position = c("left", "top"),
+#             title = "Percentage of ELL enrollment by district, 2017-18",
+#             title.bg.color = "white", title.bg.alpha = 0.6)
+# 
+# # Plot schools in determined percentile for ELL enrollment in Manhattan and The Bronx:
+# high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>% 
+#   filter(pct_ell > quantile(.$pct_ell, schools_percentile)) %>% 
+#   filter(boro %in% c("X", "M")) %>%
+#   .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
+# 
+# plot2 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + 
+#   tm_fill(col = "grey90") +
+#   tm_shape(nyc_sds) + tm_borders() + tm_fill(alpha = 0) +
+#   tm_shape(high_ell_schools_man_bx) + 
+#   tm_symbols(col = "red",
+#              size = "pct_ell",
+#              title.size = "% ELL enrollment",
+#              perceptual = T,
+#              sizes.legend = c(40,60,80,100), legend.size.is.portrait = F) + 
+#   tm_layout(legend.position = c("right", "bottom"),
+#             legend.bg.color = "white", legend.bg.alpha = 1, legend.frame = "black",
+#             title = paste(sch_pctile_ord, 
+#                      "percentile ELL-enrolling schools, Manhattan/Bronx"),
+#             title.position = c("center", "top"),
+#             title.bg.color = "white", title.bg.alpha = 0.6)
+# 
+# tmap_arrange(plot1, plot2, ncol = 2, asp = 1)
 ```
 
 
