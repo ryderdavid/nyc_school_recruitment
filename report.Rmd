@@ -11,6 +11,8 @@ output:
 }
 </style>
 
+
+
 This report attempts to answer a number of questions for Humanities II Charter School in The Bronx, New York City.
 
 ```{r setup, include=FALSE}
@@ -35,10 +37,11 @@ library(acs)
 library(devtools)
 library(raster)
 library(tidyverse)
+library(BAMMtools) # for getting jenks natural breaks
 ```
 
 
-```{r data_prep, results='hide', cache=F}
+```{r data_prep, results='hide', cache=T}
 
 if(!dir.exists("data")) {
   dir.create("data/downloads", recursive = T)
@@ -277,6 +280,8 @@ staten_sf <- nyc_ntas %>% filter(boroname == "Staten Island") %>% st_union()
 
 nyc_sf <- st_union(c(manhattan_sf, bronx_sf, queens_sf, brooklyn_sf, staten_sf))
 
+nyc_area_land <- st_union(nj_land, nyc_sf)
+
 # set a bbox for common views of manhattan and bronx together
 man_bx_bbox <- st_bbox(st_union(manhattan_sf, bronx_sf))
 
@@ -387,9 +392,11 @@ registration_points <- application_points %>%
 
 ```
 
+
 ```{r functions, results='hide', cache=T}
 
-# This might be ready for deletion -- possibly unused
+# Used in bus route chunk.
+
 st_intersects_tally_attr <-
   function(x = NULL,
            y = NULL,
@@ -428,14 +435,10 @@ st_intersects_tally_attr <-
     return(x %>% bind_cols((!!a) := attr_n))
     
   }
-
-
-
-
 ```
 
 
-## Historical Recruitment Data 
+## Historical Recruitment Data {.tabset}
 
 ```{r historical_recruitment}
 
@@ -452,7 +455,6 @@ recruitment_by_tract_tidy <-
   inner_join(nyc_tracts, ., by = c("GEOID" = "GEOID"))
 
 
-
 recruitment_by_sd_tidy <- 
   recruitment_data %>% 
   st_drop_geometry %>% 
@@ -464,12 +466,6 @@ recruitment_by_sd_tidy <-
   ungroup() %>% 
   inner_join(nyc_sds, ., by = c("school_dist" = "school_dist"))
 
-```
-
-### Application Data
-
-```{r applications_plot}
-
 applications_by_tract_yearly_totals <- 
   recruitment_by_tract_tidy %>% 
   group_by(GEOID, tractname, year) %>% 
@@ -477,75 +473,148 @@ applications_by_tract_yearly_totals <-
   group_by(year) %>% 
   mutate(pct_yr = n / sum(n) * 100) %>% 
   ungroup() %>% 
-  mutate(pct_total = n / sum(n) * 100) %>% 
+  mutate(pct_total = n / sum(n) * 100) %>%
   filter(n > 0)
 
-tmap_mode("view")
-
-
-tm_tiles(providers$CartoDB.PositronNoLabels) + 
-tm_shape(nyc_sds, point.per = "feature") +
-  tm_borders(alpha = 0.7) +
-  tm_text(text = "school_dist") +
-tm_shape(applications_by_tract_yearly_totals) + 
-  tm_borders(alpha = 0.2) + 
-  tm_facets(by="year", 
-            sync = T,
-            ncol = 3,
-            nrow = 1) +
-  tm_fill(col = "n",
-        id="tractname",
-        style = "jenks",
-        title = "Applications",
-        popup.vars = c("Applications"="n",
-                       "% of Year's Applications"="pct_yr")) +
-  tm_view(set.view = c(-73.86652, 40.85263, 11),
-        set.zoom.limits = c(11,14)) + 
-  tm_layout(panel.show = F)
-
-
-
-```
-\  
-Above is the distribution of applications received, aggregated by census tract. 
-\  
-
-
-### Registration Data
-
-```{r registrations_plot}
+apps_jenks_breaks <- applications_by_tract_yearly_totals$n %>% getJenksBreaks(6)
 
 registrations_by_tract_yearly_totals <-
   recruitment_by_tract_tidy %>%
   filter(registered == T, n > 0)
 
-tm_tiles(providers$CartoDB.PositronNoLabels) +
-tm_shape(nyc_sds, point.per = "feature") +
-  tm_borders(alpha = 0.5) +
-  tm_text(text = "school_dist") +
-tm_shape(registrations_by_tract_yearly_totals) +
-  tm_borders(alpha = 0.2) +
-  tm_facets(by="year",
-            sync = T,
-            nrow = 1,
-            ncol = 2) +
-  tm_fill(col = "n",
-          palette = "BuGn",
-          id="tractname",
-          style = "pretty",
-          title = "Registrations",
-          popup.vars = c("Registrations"="n",
-                         "% of Year's Registrations"="pct_yr")) +
-  tm_view(set.view = c(-73.86652, 40.85263, 11),
-        set.zoom.limits = c(11,14)) +
-  tm_layout(panel.show = F)
+regs_jenks_breaks <- getJenksBreaks(registrations_by_tract_yearly_totals$n, 6)
 
 ```
-\  
-Above is the distribution of students registered, aggregated by census tract. 
-\  
 
+### Application Data
+
+Below are the distributions of applications received from the `r applications_by_tract_yearly_totals$year %>% min()`-`r (applications_by_tract_yearly_totals$year %>% min() + 1)` to the `r applications_by_tract_yearly_totals$year %>% max()`-`r applications_by_tract_yearly_totals$year %>% max() + 1` school years, arranged by NYC Census Tract. In total, `r applications_by_tract_yearly_totals$n %>% sum()` applications were received from `r applications_by_tract_yearly_totals$tractname %>% unique() %>% length()` tracts.
+
+
+```{r applications_plot}
+
+tmap_mode("view")
+
+a_2017 <- 
+  tm_tiles(providers$CartoDB.PositronNoLabels) + 
+    tm_shape(nyc_sds, point.per = "feature") +
+      tm_borders(alpha = 0.7) +
+      tm_text(text = "school_dist") +
+    tm_shape(applications_by_tract_yearly_totals %>% 
+               filter(year == 2017)) + 
+      tm_borders(alpha = 0.2) +
+      tm_fill(col = "n",
+            id="tractname",
+            breaks = apps_jenks_breaks,
+            title = "2017 Apps",
+            popup.vars = c("Applications"="n",
+                           "% of Year's Applications"="pct_yr")) +
+      tm_view(set.view = c(-73.86652, 40.85263, 11),
+            set.zoom.limits = c(11,14)) + 
+    tm_layout(outer.margins = 20)    
+
+a_2018 <- 
+  tm_tiles(providers$CartoDB.PositronNoLabels) + 
+    tm_shape(nyc_sds, point.per = "feature") +
+      tm_borders(alpha = 0.7) +
+      tm_text(text = "school_dist") +
+    tm_shape(applications_by_tract_yearly_totals %>% 
+               filter(year == 2018)) + 
+      tm_borders(alpha = 0.2) +
+      tm_fill(col = "n",
+            id="tractname",
+            breaks = apps_jenks_breaks,
+            title = "2018 Apps",
+            popup.vars = c("Applications"="n",
+                           "% of Year's Applications"="pct_yr")) +
+      tm_view(set.view = c(-73.86652, 40.85263, 11),
+            set.zoom.limits = c(11,14)) + 
+    tm_layout(outer.margins = 20)
+
+a_2019 <- 
+  tm_tiles(providers$CartoDB.PositronNoLabels) + 
+    tm_shape(nyc_sds, point.per = "feature") +
+      tm_borders(alpha = 0.7) +
+      tm_text(text = "school_dist") +
+    tm_shape(applications_by_tract_yearly_totals %>% 
+               filter(year == 2019)) + 
+      tm_borders(alpha = 0.2) +
+      tm_fill(col = "n",
+            id="tractname",
+            breaks = apps_jenks_breaks,
+            title = "2019 Apps",
+            popup.vars = c("Applications"="n",
+                           "% of Year's Applications"="pct_yr")) +
+      tm_view(set.view = c(-73.86652, 40.85263, 11),
+            set.zoom.limits = c(11,14)) + 
+    tm_layout(outer.margins = 20)
+
+tmap_arrange(a_2017, a_2018, a_2019, nrow = 1)
+
+
+
+
+```
+  
+
+
+### Registration Data
+
+Below are the distributions of applications that resulted in the student being accepted and registered. The registration data currently tracks the `r registrations_by_tract_yearly_totals$year %>% min()`-`r registrations_by_tract_yearly_totals$year %>% min() + 1` to the `r registrations_by_tract_yearly_totals$year %>% max()`-`r registrations_by_tract_yearly_totals$year %>% max() + 1` school years, with `r registrations_by_tract_yearly_totals$n %>% sum()` registrations in total occurring from `r registrations_by_tract_yearly_totals$tractname %>% unique() %>% length()` tracts in New York City.
+
+```{r registrations_plot}
+
+tmap_mode("view")
+
+
+regs_2017 <- tm_tiles(providers$CartoDB.PositronNoLabels) +
+  tm_shape(nyc_sds, point.per = "feature") +
+    tm_borders(alpha = 0.5) +
+    tm_text(text = "school_dist") +
+  tm_shape(registrations_by_tract_yearly_totals %>%
+             filter(year == 2017)) +
+    tm_borders(alpha = 0.2) +
+
+    tm_fill(col = "n",
+            palette = "BuGn",
+            id="tractname",
+            breaks = regs_jenks_breaks,
+            title = "2017 Regs",
+            popup.vars = c("Registrations"="n",
+                           "% of Year's Registrations"="pct_yr")) +
+    tm_view(set.view = c(-73.86652, 40.85263, 11),
+          set.zoom.limits = c(11,14))
+
+regs_2018 <- tm_tiles(providers$CartoDB.PositronNoLabels) +
+  tm_shape(nyc_sds, point.per = "feature") +
+    tm_borders(alpha = 0.5) +
+    tm_text(text = "school_dist") +
+  tm_shape(registrations_by_tract_yearly_totals %>%
+             filter(year == 2018)) +
+    tm_borders(alpha = 0.2) +
+
+    tm_fill(col = "n",
+            palette = "BuGn",
+            id="tractname",
+            breaks = regs_jenks_breaks,
+            title = "2018 Regs",
+            popup.vars = c("Registrations"="n",
+                           "% of Year's Registrations"="pct_yr")) +
+    tm_view(set.view = c(-73.86652, 40.85263, 11),
+          set.zoom.limits = c(11,14))
+
+tmap_arrange(regs_2017, regs_2018, nrow = 1)
+
+
+```
+  
+  
+******
+
+  
 ### Application to Registration Performance
+
+Below is the comparative performance of recruitment in each of New York's `r nyc_sds %>% length()` school district boundaries, showing the number of total applications received and the number of registrations completed from those applications, per year, for the `r min(recruitment_by_sd_tidy$year)`-`r min(recruitment_by_sd_tidy$year) + 1` to the `r max(recruitment_by_sd_tidy$year)`=`r max(recruitment_by_sd_tidy$year) + 1` school years.
 
 ```{r app_reg_performance}
 
@@ -868,6 +937,7 @@ tmap_mode("view")
   #  Focus view to the center of the Bronx, set zoom to fill view with Bronx
   tm_view(set.view=c(-73.88251, 40.83489, 12),
           set.zoom.limits = c(11, 15))
+
 
   
 ```
