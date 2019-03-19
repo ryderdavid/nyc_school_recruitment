@@ -1,46 +1,3 @@
-applications_by_tract_tidy <- 
-  recruitment_data %>% 
-  st_drop_geometry() %>% 
-  count(GEOID, year, registered) %>% 
-  complete(GEOID, year, registered, fill = list(n = 0)) %>% 
-  inner_join(nyc_tracts, ., by = c("GEOID" = "GEOID"))
-
-registrations_by_tract_tidy <- 
-  applications_by_tract_tidy %>% 
-  filter(registered == T)
-
-
-
-
-
-tm_tiles(providers$CartoDB.PositronNoLabels) + 
-  tm_shape(nyc_sds, point.per = "feature") +
-  tm_borders(alpha = 0.7) +
-  tm_text(text = "school_dist") +
-  tm_shape(applications_by_tract_yearly_totals %>% 
-             filter(year == 2017)) + 
-  tm_borders(alpha = 0.2) +
-  tm_fill(col = "n",
-          id="tractname",
-          breaks = apps_jenks_breaks,
-          title = "2017 Apps",
-          popup.vars = c("Applications"="n",
-                         "% of Year's Applications"="pct_yr")) +
-  tm_view(set.view = c(-73.86652, 40.85263, 11),
-          set.zoom.limits = c(11,14)) + 
-  tm_layout(outer.margins = 20)    
-
-
-
-
-pal <- colorBin("YlOrBr", domain = recruitment_by_sd_tidy %>% 
-                  filter(year == 2017))
-
-leaflet() %>% 
-  addProviderTiles("CartoDB.PositronNoLabels") %>% 
-  setView(lng = -73.86652, lat = 40.85263, zoom = 11) %>% 
-  addPolygons(data = recruitment_by_tract_tidy)
-  
 
 
 
@@ -78,11 +35,6 @@ leaflet() %>%
 
 
 
-
-
-
-
-recruitment_data %>% glimpse
 
 
 

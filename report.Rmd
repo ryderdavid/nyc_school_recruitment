@@ -2,8 +2,7 @@
 title: "HUM II Recruitment"
 author: "Ryder Cobean"
 output: 
-  html_document:
-    css: style.css
+  html_document
 ---
 
 <style>
@@ -97,6 +96,16 @@ man_bx_zips <- nyc_area_zips %>% filter(str_detect(GEOID10, "^100|^101|^102|^103
 # download.file("https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-data/nysd_18d.zip", 
 #   destfile = "data/nysd_18d.zip")
 # unzip("nysd_18d.zip", exdir = "data/nysd_18d", overwrite = T)
+
+
+
+# Get NYCHA location geojson
+nycha_locations <- 
+  st_read("https://data.cityofnewyork.us/resource/5j2e-zhmb.geojson", stringsAsFactors = F) %>% 
+  st_transform(crs = wgs84_crs)
+
+
+
 
 # NYC's SD geojson file only pulls in data as characters, which leads sf to read
 # them as factors which breaks all attempts at analysis. forcing NOT to factors
@@ -489,12 +498,12 @@ regs_jenks_breaks <- getJenksBreaks(registrations_by_tract_yearly_totals$n, 6)
 
 ```
 
-### Application Data
+### Application Data {.tabset}
 
 Below are the distributions of applications received from the `r applications_by_tract_yearly_totals$year %>% min()`-`r (applications_by_tract_yearly_totals$year %>% min() + 1)` to the `r applications_by_tract_yearly_totals$year %>% max()`-`r applications_by_tract_yearly_totals$year %>% max() + 1` school years, arranged by NYC Census Tract. In total, `r applications_by_tract_yearly_totals$n %>% sum()` applications were received from `r applications_by_tract_yearly_totals$tractname %>% unique() %>% length()` tracts.
 
 
-```{r applications_plot}
+```{r, applications_plot}
 
 tmap_mode("view")
 
@@ -552,16 +561,27 @@ a_2019 <-
             set.zoom.limits = c(11,14)) + 
     tm_layout(outer.margins = 20)
 
-tmap_arrange(a_2017, a_2018, a_2019, nrow = 1)
-
-
-
-
 ```
   
+#### 2017 Applications  
+  
+```{r}
+a_2017
+```
 
+#### 2018 Applications  
+  
+```{r}
+a_2018
+```
 
-### Registration Data
+#### 2019 Applications  
+  
+```{r}
+a_2019
+```
+
+### Registration Data {.tabset}
 
 Below are the distributions of applications that resulted in the student being accepted and registered. The registration data currently tracks the `r registrations_by_tract_yearly_totals$year %>% min()`-`r registrations_by_tract_yearly_totals$year %>% min() + 1` to the `r registrations_by_tract_yearly_totals$year %>% max()`-`r registrations_by_tract_yearly_totals$year %>% max() + 1` school years, with `r registrations_by_tract_yearly_totals$n %>% sum()` registrations in total occurring from `r registrations_by_tract_yearly_totals$tractname %>% unique() %>% length()` tracts in New York City.
 
@@ -606,12 +626,20 @@ regs_2018 <- tm_tiles(providers$CartoDB.PositronNoLabels) +
     tm_view(set.view = c(-73.86652, 40.85263, 11),
           set.zoom.limits = c(11,14))
 
-tmap_arrange(regs_2017, regs_2018, nrow = 1)
+# tmap_arrange(regs_2017, regs_2018, nrow = 1)
 
 
 ```
   
-  
+#### 2017 Registrations
+```{r}
+regs_2017
+```
+
+#### 2018 Registrations
+```{r}
+regs_2018
+```
 
 
   
@@ -641,10 +669,8 @@ ggplot(recruitment_by_sd_tidy %>%
 
 
 ## Special Groups Recruitment
-### Question: If I want to to target and recruit ELL students, where would the most sensible places be to work on targeted recruitment?
 
-One question posed was what strategies could be employed to better target ELL recruitment efforts. 
-This report reviewed the data from NYC's Department of Education on enrollment statistics in `r length(unique(districts_demo_snapshot_1718$school_dist))` districts, focusing on those in Manhattan and The Bronx. 
+Focusing on Manhattan and the Bronx, this report analyzed NYC's Department of Education enrollment statistics in `r length(unique(districts_demo_snapshot_1718$school_dist))` districts, to determine best advertisement placements for reaching English Language Learner students.
 
 ```{r}
 # Percentile formatting for text below and to set percentile for slicing data below
@@ -963,14 +989,34 @@ kable(manbx_bus_routes_with_lep_kable,
 
 \  
 
+### To reach target recruitment systemwide
+
+Though
+
+```{r, to_reach_target_recruitment}
+
+
+recruitment_data %>% 
+  filter(year %in% c(2017, 2018)) %>% 
+  st_drop_geometry() %>% 
+  count(registered) %>% 
+  spread(registered, n) %>% 
+  transmute(Applied = `TRUE` + `FALSE`,
+            Registered = `TRUE`,
+            `Registration Rate` = Registered / Applied,
+            `To Reach 1200` = 1200 %/% `Registration Rate`) %>% 
+  kable(., caption = "To reach target enrollment") %>% 
+  kable_styling(bootstrap_options = "striped")
+  
+
+```
 
 
 
-```{r housing dataset}
+```{r, housing_dataset, include=FALSE}
 
 nycha_stats <- read_csv("https://data.cityofnewyork.us/api/views/evjd-dqpz/rows.csv?accessType=DOWNLOAD")
 
-nycha_stats %>% glimpse
 
 nycha_sf <- st_read("https://data.cityofnewyork.us/resource/5j2e-zhmb.geojson",
                     stringsAsFactors = F) %>% 
