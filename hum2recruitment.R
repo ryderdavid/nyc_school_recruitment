@@ -17,33 +17,33 @@ check.packages <- function(pkg){
 
 packages <- c('sf', 'devtools', 'acs', 'tidycensus', 'tidyverse', 'tigris', 'sp', 
               'tmap', 'tmaptools', 'readxl', 'ggplot2', 'rgdal', 'spdplyr', 'RColorBrewer', 
-              'viridis', 'viridisLite', 'rstudioapi')
+              'viridis', 'viridisLite', 'rstudioapi', 'raster')
 
 check.packages(packages)
 
-
-library(rJava)
-library(devtools)
-library(acs)
-library(tidycensus)
-library(tidyverse)
-library(tigris)
-library(sp)
-library(tmap)
-library(readxl)
-library(ggplot2)
-library(rgdal)
-library(spdplyr)
-library(RColorBrewer)
-library(viridis)
-library(viridisLite)
-library(tmaptools)
-library(RSocrata)
-library(grid)
-library(gridExtra)
-# to create grid side by side layouts of tmap plots per
-# https://stackoverflow.com/questions/34344454/plot-2-tmap-objects-side-by-side
-library(grid)
+# 
+# library(rJava)
+# library(devtools)
+# library(acs)
+# library(tidycensus)
+# library(tidyverse)
+# library(tigris)
+# library(sp)
+# library(tmap)
+# library(readxl)
+# library(ggplot2)
+# library(rgdal)
+# library(spdplyr)
+# library(RColorBrewer)
+# library(viridis)
+# library(viridisLite)
+# library(tmaptools)
+# library(RSocrata)
+# library(grid)
+# library(gridExtra)
+# # to create grid side by side layouts of tmap plots per
+# # https://stackoverflow.com/questions/34344454/plot-2-tmap-objects-side-by-side
+# library(grid)
 
 
 
@@ -62,7 +62,7 @@ setwd("data")
 
 
 download.file("https://www1.nyc.gov/assets/planning/download/zip/data-maps/open-data/nysd_18d.zip", destfile = "nysd_18d.zip")
-unzip("nysd_18d.zip")
+unzip("nysd_18d.zip", overwrite = T)
 
 # Read in the data from each sheet
 sheet_1 <- read_xlsx("historical_recruitment_data_1.xlsx", sheet = 1)
@@ -170,11 +170,9 @@ man_bx_merge <- merge(man_bx_zips,
 # Create a single point shapefile for Samuel Gompers HS
 sam_gompers_hs <- data.frame(name = "Samuel Gompers HS", lat = 40.811227, long = -73.907361)
 coordinates(sam_gompers_hs) <- ~long + lat
-
-require(raster)
 projection(sam_gompers_hs) = as.character(proj4string(man_bx_merge)) # update this to method used elsewhere
-dir.create("sghs_coords")
-shapefile(sam_gompers_hs, "sghs_coords/sghs_coords.shp")
+# dir.create("sghs_coords")
+# shapefile(sam_gompers_hs, "sghs_coords/sghs_coords.shp")
 
 
 
@@ -231,6 +229,20 @@ tmap_man_bx_zoom <- function() {
 
 
 
+
+#####
+#####
+#####
+#####
+#####
+#####
+
+
+
+
+
+
+
 # Turned plotting by registration year into a function
 plot_reg_by_year <- function(yr, rec_data = recruitment_data_clean, p = "Oranges") {
   
@@ -276,24 +288,6 @@ plot_reg_by_year <- function(yr, rec_data = recruitment_data_clean, p = "Oranges
   return(regplot.yr)
   
 }
-
-
-
-# 
-# # Explore: Trying to 
-# recruitment_data_clean %>% 
-#   count(zip, year) %>% 
-#   spread(year, n, fill = 0) %>% 
-#   mutate(dist_17_18 = `2018` - `2017`, 
-#          pct_chg_17_18 = `2018` - `2017` / `2017`, 
-#          dist_18_19 = `2019` - `2018`, 
-#          pct_chg_18_19 = `2019` - `2018` / `2018`)
-# 
-# 
-# recruitment_data_clean[recruitment_data_clean$pct_chg]
-
-
-
 
 
 
@@ -376,29 +370,20 @@ plot_sd_chloropleth <- function(year = seq(1950,2050), palette = "YlOrBr", regon
 }
 
 
-
-
-
-###
-### LOAD ONLY TO HERE
-
-
-
-
-
 ### Question: where are candidate students best converting from applications to registrations?
 ### note: http://www.guru-gis.net/count-points-in-polygons/
 
-plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
+plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "Greys", data = recruitment_data_clean) {
   
   yr <- year
   p <-  palette
+  # 
+  # yr <- 2019
+  # p <- "BuGn"
+  # data = recruitment_data_clean
   
-  yr <- 2017
-  p <- "BuGn"
   
-  
-  app_points <- recruitment_data_clean %>% 
+  app_points <- data %>% 
     dplyr::select(application_id, year, long, lat, 
                   registration_completed_date, submission_date, year) %>% 
     mutate(registered = ifelse(!is.na(registration_completed_date), 1, 0)) %>% 
@@ -406,15 +391,18 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
   
   # filter points by passed year
   app_points <- app_points %>% filter(year %in% yr)
-
+  
   coordinates(app_points) <- ~long + lat # move coords into SPDF slot
   proj4string(app_points) <- CRS(NYC_CRS) # set common projection
   
   
   # create a reg_points SPDF that only contains successful registrations
   reg_points <- app_points %>% filter(registered == 1)
-
-  coordinates(reg_points) <- ~long + lat # move coords into SPDF slot
+  
+  reg_points
+  app_points
+  
+  # coordinates(reg_points) <- ~long + lat # move coords into SPDF slot
   proj4string(reg_points) <- CRS(NYC_CRS) # set common projection
   
   # calc how many applications and registrations plot into nyc sds polys. Fun
@@ -427,113 +415,44 @@ plot_conversions_by_sd <- function(year = seq(1950,2050), palette = "YlOrBr") {
   
   
   # tabulate applications and registrations per school district
-  total_apps_per_sd <- apps_over_sds %>% count(SchoolDist) %>% rename(apps=n)
-  total_regs_per_sd <- regs_over_sds %>% count(SchoolDist) %>% rename(regs=n)
-
+  total_apps_per_sd <- apps_over_sds %>% count(SchoolDist) %>% rename(applications=n)
+  total_regs_per_sd <- regs_over_sds %>% count(SchoolDist) %>% rename(registrations=n)
   
   
   # merge both attributes and get apps -> regs conversion rate
   conversions_per_sd <- merge(total_apps_per_sd, 
                               total_regs_per_sd, by = "SchoolDist") %>% 
-    mutate(rate = regs / apps)
+    mutate(rate = registrations / applications)
   
   # merge conversions with spatial data on school districts, and remove SDs
   # where no applications or registrations were plotted
   conversions_per_sd_spdf <-  merge(nyc_sds_fixed, conversions_per_sd,
-          by.x = "SchoolDist", 
-          by.y = "SchoolDist") %>% 
-    filter(!is.na(apps) & !is.na(regs) & !is.na(rate))
+                                    by.x = "SchoolDist", 
+                                    by.y = "SchoolDist") %>% 
+    filter(!is.na(applications) & !is.na(registrations) & !is.na(rate))
   
-  conversions_per_sd_long <- conversions_per_sd_spdf@data %>% gather(key="type", value="count", "apps", "regs")
+  conversions_per_sd_long <- conversions_per_sd_spdf@data %>% gather(key="type", value="count", "applications", "registrations")
   
-  clr <- brewer.pal(5, p)[3]
+  # prep two special variables for plot presentation
+  clr <- brewer.pal(5, p)[4] # sets the color of registrations
+  yrlabel <- ifelse(length(yr) == 1, as.character(yr), paste(min(yr), "-", max(yr), sep = ""))
   
-  
-  ggplot(data = conversions_per_sd_long, 
-         mapping = aes(x = as.factor(SchoolDist), y = count, fill = type)) + 
+  app_to_reg_plot <- ggplot(data = conversions_per_sd_long, 
+                            mapping = aes(x = as.factor(SchoolDist), y = count, fill = type)) + 
     geom_bar(stat = "identity") + 
+    theme(axis.title.x = element_blank()) + 
     coord_flip() + 
-    scale_fill_manual(values = c("grey75", clr)) + 
-    theme(legend.position = "bottom") + 
-    ggtitle('Applications and Registrations by School District') + 
+    scale_fill_manual(values = c("grey70", clr)) + 
+    theme(legend.position = "bottom",
+          legend.spacing.x = unit(0.25, 'cm'),
+          legend.title = element_blank()) + 
+    ggtitle(paste('Applications and Registrations by School District, ', yrlabel, sep = "")) + 
     theme(plot.title = element_text(hjust = 0.5)) + 
     xlab("School District")
   
+  return(app_to_reg_plot)
   
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  # # create a pretty label variable combining SD number and number of applications
-  # points_per_sd_spdf <- points_per_sd_spdf %>% 
-  #   mutate(label = paste("SD", as.character(SchoolDist), ":\n", 
-  #                        as.character(n), sep = ""))
-  
-  # applications or registrations changes title and legend name
-  if(regonly == T) {
-    ar <- "registrations"
-    ar_title <- "Registrations"
-  } else {
-    ar <- "applications"
-    ar_title <- "Applications"
-  }
-  
-  # plot points per SD
-  tmap_mode("plot")
-  
-  tmap_man_bx_zoom() +
-    tm_shape(points_per_sd_spdf) +
-    tm_borders(alpha = 0.3, lw = 1.5) + 
-    tm_fill(col = "n", title = ar, colorNA = NULL, palette = p) + 
-    tm_text(text = "label", fontface = "bold", style = "pretty", 
-            size = "n", legend.size.show = F, shadow = TRUE) + 
-    tm_layout(main.title = paste(ar_title, "per school district,", "\n", yrlabel), 
-              main.title.position = ("center"), fontface = "bold", legend.position = c("left", "top"))
-  
-}
-
-
-## Plot Applications by Zip Code:
-tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930), 
-         xlim = c(-74.041447, -73.78)) + 
-  tm_fill(col = "grey90") +
-  
-  tm_shape(man_bx_zips) + tm_fill(col = "grey90") + tm_layout(bg.color = "grey75") +
-  tm_shape(man_bx_merge) + 
-  tm_borders(lw = 1.5, alpha = .2) + 
-  tm_fill(col = "n", title = "Applications", palette = "YlOrBr", colorNA = NULL) + 
-  tm_text(text = "GEOID10", size = "n", style = "pretty", size.lim = c(100, 400),
-          shadow = T, legend.size.show = F, fontface = "bold") +
-  tm_layout(main.title = paste("Distribution of", 
-                               format(sum(man_bx_apps_by_zip$n), big.mark = ","),
-                               paste("applications in Manhattan",
-                                     "and the Bronx,\n2017-2019 School Years, by Zip Code Tabulation Area")),
-            main.title.position = "center",
-            legend.position = c("left", "top"),
-            main.title.size = 1.2) + 
-  tm_credits("Source: HUM II Recruitment Data, 2017-2019", 
-             position = c("right", "bottom")) + 
-  tm_shape(sam_gompers_hs) + tm_symbols(size = .5, col = "#226bf8", style = "pretty", 
-                                        border.lwd = 1.5, border.col = "white", shape = 23)
-
-
-
-
-# demonstrate application to registration comparisons
+}  
 
 
 
@@ -541,27 +460,164 @@ tm_shape(nyc_area_zips, ylim = c(40.681061, 40.930),
 
 
 
+plot_app_to_reg_by_year <- function(year = seq(1950,2050), palette = "Set1", data = recruitment_data_clean, top.n = 10) {
+  
+  yr <- year
+  p <-  palette
+
+  
+  app_points <- data %>% 
+    dplyr::select(application_id, year, long, lat, 
+                  registration_completed_date, submission_date, year) %>% 
+    mutate(registered = ifelse(!is.na(registration_completed_date), 1, 0)) %>% 
+    dplyr::select(-registration_completed_date)
+  
+  # filter points by passed year
+  app_points <- app_points %>% filter(year %in% yr)
+  
+  coordinates(app_points) <- ~long + lat # move coords into SPDF slot
+  proj4string(app_points) <- CRS(NYC_CRS) # set common projection
+  
+  app_points
+  
+  # create a reg_points SPDF that only contains successful registrations
+  reg_points <- app_points %>% filter(registered == 1)
+  
+  reg_points
+  app_points
+  
+  # coordinates(reg_points) <- ~long + lat # move coords into SPDF slot
+  proj4string(reg_points) <- CRS(NYC_CRS) # set common projection
+  
+  # calc how many applications and registrations plot into nyc sds polys. Fun
+  # raster::intersect() introduces NAs where points plot outside the scope of the NYC sds I
+  # have trimmed the plot to (say if someone has applied from Jersey or out of
+  # state), so after checking which poly each point plots over, I filter out any
+  # that have NAs (aka where they are outside the scope of the query.)
+  #
+  # NOTE: THIS IS WIP FUNCTION - I STILL DON'T HAVE IT DOING WHAT I WANT IT TO. 
+  apps_over_sds <- intersect(app_points, nyc_sds_fixed) %>% filter_all(any_vars(!is.na(.)))
+  regs_over_sds <- intersect(reg_points, nyc_sds_fixed) %>% filter_all(any_vars(!is.na(.)))
+  
+  apps_over_sds@data %>% group_by(SchoolDist, registered, year) %>% 
+    summarise(count = n()) -> sd_stats
+  
+  sd_stats$year <- as.factor(sd_stats$year)
+  levels(sd_stats$year)
+  
+  
+  sd_stats %>% 
+    group_by(SchoolDist) %>% 
+    summarise(count = sum(count)) %>% 
+    top_n(top.n, count) %>% 
+    pull(SchoolDist) -> top_dists
+
+  
+  sd_stats_top <- sd_stats %>% filter(SchoolDist %in% top_dists)
+  
+  data <- sd_stats_top
+  
+  yrlabel <- ifelse(length(yr) == 1, as.character(yr), paste(min(yr), "-", max(yr), sep = ""))
+  
+  # This plots color of each 
+  ggplot(data, aes(x = as.factor(SchoolDist), y = count)) + 
+    geom_bar(stat = "identity", fill = "grey70") + 
+    theme(axis.title.x = element_blank()) + 
+    coord_flip() +
+    # scale_color_brewer(palette = "Greys") +
+    geom_bar(data = filter(data, registered == 1), 
+             aes(fill = year), position = position_stack(reverse = T), stat = "identity") +
+    scale_fill_brewer(palette = p) + 
+    theme(legend.position = "bottom",
+          legend.spacing.x = unit(0.25, 'cm'),
+          legend.title = element_blank()) + 
+    ggtitle(paste("Recruitment activity in top ", top.n, " recruiting school districts, ", yrlabel, 
+                  "\n(total applications for all years shown in grey)", sep = "")) + 
+    theme(plot.title = element_text(hjust = 0.5)) + 
+    xlab("School District")
+  
+}  
 
 
 
 
-# Plot by year
-plot_reg_by_year(2017, p = "Reds")
-plot_reg_by_year(2018, p = "Greens")
-plot_reg_by_year(2019)
 
 
-# plot applications and registrations by school district
-tmap_arrange(plot_sd_chloropleth(year = 2017), 
-             plot_sd_chloropleth(year = 2018, palette = "BuGn"), 
-             plot_sd_chloropleth(year = 2019, palette = "Reds"), 
-             nrow = 1, ncol = 3, asp = .85)
-
-tmap_arrange(plot_sd_chloropleth(year = 2017, regonly = T), 
-             plot_sd_chloropleth(year = 2018, palette = "BuGn", regonly = T), 
-             nrow = 1, ncol = 2, asp = NA)
 
 
-plot(nyc_sds_fixed)
 
-tm_shape(nyc_sds_fixed) + tm_borders()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###
+###
+###
+###
+###
+###
+###
+
+
+###
+### EVERYTHING ABOVE IS GOOD TO GO - FUNCTIONS BELOW ARE WIP
+
+###
+###
+###
+###
+###
+###
+###
+###
+###
+###
+
+
+
+
+
+
+
+
+
+###
+###
+###
+###
+###
+###
+###
+###
+###
+### BEGIN SECTION TO PLOT DESIRED VISUALIZATIONS BY CALLED FUNCTIONS
+###
+###
+###
+###
+###
+###
+###
+###
+###
+
+
+
+
+
+
