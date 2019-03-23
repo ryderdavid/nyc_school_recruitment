@@ -52,12 +52,12 @@ if(!dir.exists("data")) {
 }
 
 
-if(Sys.getenv("CENSUS_API_KEY") == "") {
-  
-  census_api_key(getPass("Enter U.S. census API key to install: "), install = T, overwrite = T)
-  readRenviron("~/.Renviron")
-  
-}
+# if(Sys.getenv("CENSUS_API_KEY") == "") {
+#   
+#   census_api_key(getPass("Enter U.S. census API key to install: "), install = T, overwrite = T)
+#   readRenviron("~/.Renviron")
+#   
+# }
 
 
 ##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
@@ -591,7 +591,7 @@ regs_2017 <- tm_tiles(providers$CartoDB.PositronNoLabels) +
     tm_borders(alpha = 0.2) +
 
     tm_fill(col = "n",
-            palette = "BuGn",
+            palette = "YlOrBr",
             id="tractname",
             breaks = regs_jenks_breaks,
             title = "2017 Regs",
@@ -635,25 +635,9 @@ regs_2018
 
 
   
-### Application to Registration Performance
+### Application to Registration Performance {.tabset}
 
-Below is the comparative performance of recruitment in each of New York's `r nyc_sds %>% length()` school district boundaries, showing the number of total applications received and the number of registrations completed from those applications, per year, for the `r min(recruitment_by_sd_tidy$year)`-`r min(recruitment_by_sd_tidy$year) + 1` to the `r max(recruitment_by_sd_tidy$year)`-`r max(recruitment_by_sd_tidy$year) + 1` school years.
-
-```{r app_reg_performance}
-
-
-ggplot(recruitment_by_sd_tidy %>% 
-         mutate(school_dist = as.factor(school_dist))) + 
-  geom_bar(aes(x = school_dist, y = n, fill = registered), stat = "identity") +
-  ggtitle("Recruitment Performance by Applicant's School District", 
-          subtitle = "School Years Beginning 2017 through 2019") +
-  theme(plot.title      = element_text(hjust = 0.5),
-        plot.subtitle   = element_text(hjust = 0.5),
-        legend.position = "bottom") +
-  xlab("School District") + 
-  ylab("Count") +
-  facet_grid(year ~ .)
-
+```{r recruitment_performance_setup, include=F}
 
 tracts_by_recruitment_performance <- 
   recruitment_data %>% 
@@ -682,23 +666,99 @@ tracts_by_recruitment_performance <-
   inner_join(., nyc_tracts, by = c("GEOID" = "GEOID")) %>% 
   st_as_sf(.)
 
-rec_rates_2017 <- tracts_by_recruitment_performance %>% filter(Year == 2017)
-tm_shape(rec_rates_2017) + tm_borders(alpha = 0.2) + 
-  tm_fill(col = "Recruitment Rate")
+# Applications to Registrations Rate Map:
+apps_to_regs_map <- function(years = seq(0,10000), 
+                             pal = "YlOrBr") {
+  
+  data <- tracts_by_recruitment_performance
+  years <- years
+  pal <- pal
 
-rec_rates_2018 <- tracts_by_recruitment_performance %>% filter(Year == 2018)
-tm_shape(rec_rates_2018) + tm_borders(alpha = 0.2) + 
-  tm_fill(col = "Recruitment Rate",
-          palette = "BuGn")
+  data %<>%
+    filter(Year %in% years)
 
-# rec_rates_2019 <- tracts_by_recruitment_performance %>% filter(Year == 2018)
-# tm_shape(rec_rates_2018) + tm_borders(alpha = 0.2) + 
-#   tm_fill(col = "Recruitment Rate",
-#           style = "jenks")
+  map_plot <-
+    tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) +
+    tm_shape(nyc_sds, point.per = "feature") +
+      tm_borders(alpha = 0.7) +
+      tm_text(text = "school_dist") +
+    tm_shape(data) +
+      tm_borders(alpha = 0.2) +
+      tm_fill(col = "Recruitment Rate",
+              palette = pal,
+              id = "tractname",
+              title =
+
+                # logic to handle whether years renders as
+                # YYYY-YY or just YYYY depending on whether
+                # multiple years are called in args
+                if (length(years) > 1) {
+                  paste("Regs:Apps, ", "\n", min(years), "-",
+                            substr(toString(max(years)), 3, 4),
+                            sep = "")
+                } else {
+                  paste("Apps:Regs, ", "\n",
+                        years,
+                        sep = "")
+                },
+
+              popup.vars =
+                c("Tract ID #"="GEOID",
+                  "Applied",
+                  "Registered",
+                  "Not Registered",
+                  "Recruitment Rate")) +
+      tm_view(set.view = c(-73.86652, 40.85263, 11),
+              set.zoom.limits = c(11,14)) +
+      tm_layout(outer.margins = 20)
+  
+  return(map_plot)
+  
+}
+
+```
+
+
+Below are a number of views of the recruitment performance, by different geographies.
+
+#### By School District, All Years
+
+Below is the comparative performance of recruitment in each of New York's `r nyc_sds %>% length()` school district boundaries, showing the number of total applications received and the number of registrations completed from those applications, per year, for the `r min(recruitment_by_sd_tidy$year)`-`r min(recruitment_by_sd_tidy$year) + 1` to the `r max(recruitment_by_sd_tidy$year)`-`r max(recruitment_by_sd_tidy$year) + 1` school years.
+
+
+```{r app_reg_performance}
+
+
+ggplot(recruitment_by_sd_tidy %>% 
+         mutate(school_dist = as.factor(school_dist))) + 
+  geom_bar(aes(x = school_dist, y = n, fill = registered), stat = "identity") +
+  ggtitle("Recruitment Performance by Applicant's School District", 
+          subtitle = "School Years Beginning 2017 through 2019") +
+  theme(plot.title      = element_text(hjust = 0.5),
+        plot.subtitle   = element_text(hjust = 0.5),
+        legend.position = "bottom") +
+  xlab("School District") + 
+  ylab("Count") +
+  facet_grid(year ~ .)
 
 
 
 
+```
+
+
+#### By Census Tracts, 2017
+
+Below are census tracts depicting rate of registration (total registrations / total applications, by applications originating in the census tract.)
+```{r}
+apps_to_regs_map(2017)
+```
+
+#### By Census Tracts, 2018
+
+Below are census tracts depicting rate of registration (total registrations / total applications, by applications originating in the census tract.)
+```{r}
+apps_to_regs_map(2018, "BuGn")
 ```
 
 
@@ -829,9 +889,7 @@ high_lep_bus_shelters_manbx <- st_intersection(nyc_bus_shelters, high_lep_hh_man
 # Prep a version of the dataframe of 
 shelter_table <- high_lep_bus_shelters_manbx %>% as_tibble() %>% 
   transmute(`Shelter ID` = shelter_id, Coordinates = coords,
-            Address = revgeo(longitude = longitude, latitude = latitude, 
-                             provider = "bing", 
-                             API = Sys.getenv("BING_API_KEY")) %>% as.character(),
+            Location = paste(location, " at ", str_to_title(at_between), sep=""),
             `Census Tract` = GEOID,
             `LEP Households` = total_lep) %>% 
   arrange(desc(`LEP Households`))
