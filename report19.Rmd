@@ -2,7 +2,8 @@
 title: "HUM II Recruitment"
 author: "Ryder Cobean"
 output: 
-  html_document
+  output: rmarkdown::github_document
+always_allow_html: yes
 ---
 
 <style>
@@ -28,17 +29,16 @@ library(viridis)
 library(viridisLite)
 library(tmaptools)
 library(tmap)
-library(rgdal)
+# library(rgdal)
 library(ggplot2)
 library(readxl)
 library(tigris)
 library(tidycensus)
 library(acs)
-library(devtools)
-library(raster)
+# library(devtools)
+# library(raster)
 library(tidyverse)
 library(BAMMtools) # for getting jenks natural breaks
-library(pdftools)
 # library(tabulizer)
 ```
 
@@ -618,7 +618,6 @@ regs_2018 <- tm_tiles(providers$CartoDB.PositronNoLabels) +
     tm_view(set.view = c(-73.86652, 40.85263, 11),
           set.zoom.limits = c(11,14))
 
-# tmap_arrange(regs_2017, regs_2018, nrow = 1)
 
 
 ```
