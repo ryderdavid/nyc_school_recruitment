@@ -1,9 +1,8 @@
 ---
-title: "HUM II Recruitment"
+title: "High School Recruitment Report"
 author: "Ryder Cobean"
 output: 
-  output: rmarkdown::github_document
-always_allow_html: yes
+  output: html_document
 ---
 
 <style>
@@ -14,7 +13,7 @@ always_allow_html: yes
 
 
 
-This report attempts to answer a number of questions for Humanities II Charter School in The Bronx, New York City.
+This report attempts to answer a number of questions for a School in The Bronx, New York City.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", echo = F, warning = F, message = F)
@@ -63,7 +62,6 @@ if(!dir.exists("data")) {
 ##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
 # CRS to transform projeections of any other layer being used when necessary
 
-# wgs84_crs <- "+proj=utm +zone=18 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"
 wgs84_crs <-  "+proj=longlat +datum=WGS84 +no_defs"
 
 
@@ -495,7 +493,7 @@ regs_jenks_breaks <- getJenksBreaks(registrations_by_tract_yearly_totals$n, 6)
 Below are the distributions of applications received from the `r applications_by_tract_yearly_totals$year %>% min()`-`r (applications_by_tract_yearly_totals$year %>% min() + 1)` to the `r applications_by_tract_yearly_totals$year %>% max()`-`r applications_by_tract_yearly_totals$year %>% max() + 1` school years, arranged by NYC Census Tract. In total, `r applications_by_tract_yearly_totals$n %>% sum()` applications were received from `r applications_by_tract_yearly_totals$tractname %>% unique() %>% length()` tracts.
 
 
-```{r, applications_plot}
+```{r applications_plot}
 
 tmap_mode("view")
 
@@ -765,7 +763,7 @@ apps_to_regs_map(2018, "BuGn")
 
 Focusing on Manhattan and the Bronx, this report analyzed NYC's Department of Education enrollment statistics in `r length(unique(districts_demo_snapshot_1718$school_dist))` districts, to determine best advertisement placements for reaching English Language Learner students.
 
-```{r}
+```{r percentile_formatting}
 # Percentile formatting for text below and to set percentile for slicing data below
 schools_percentile <- 0.95
 
@@ -784,7 +782,7 @@ if((schools_percentile * 100) %% 10 == 1) {
 ### Limited English Proficiency Households
 
 One angle for targetting recruitment efforts is examining the distribution of "limited English proficiency" households in New York. The [American Community Survey](https://www.census.gov/programs-surveys/acs/news/data-releases.html?# "American Community Survey 2017 Data Releases") tabulates limited English proficiency households by census tract, which are defined as households that do not solely speak English, in which at least one member is reported by the respondent to speak English "not very well."
-```{r, lep_C16002_setup}
+```{r lep_C16002_setup}
 
 # GET 2017 5YR ACS HOUSEHOLD LANGUAGE SPOKEN BY LIMITED ENGLISH SPEAKING STATUS
 options(tigris_use_cache = TRUE)
@@ -842,7 +840,7 @@ lep_hh_by_tract_C16002_manbx <- filter(lep_hh_by_tract_C16002,
 
 The below interactive map shows the percentage of limited English proficiency households per census tract in NYC, with school district boundaries overlaid. __Note that this calculation has taken out of consideration those tracts with extremely low (first percentile and below) total tract populations.__ While some of those tracts have high proportions of limited English proficiency households, the total number of people living in them is extremely small, and most of them represent land that is largely a park or cemetery.
 
-```{r, LEP_household_proportions_map}
+```{r LEP_household_proportions_map}
 
 # Plot map of LEP household proportions by tract
 tmap_mode("view")
@@ -868,7 +866,7 @@ tm_shape(lep_hh_by_tract_C16002) +
 
 
 
-```{r, bus_shelters_lep_setup, cache=T, dependson=c("setup", "functions"), include=FALSE}
+```{r bus_shelters_lep_setup, cache=T, dependson=c("setup", "functions"), include=FALSE}
 pct <- 0.80
 high_lep_hh_manbx <- 
   lep_hh_by_tract_C16002_manbx %>% 
@@ -899,7 +897,7 @@ shelter_table <- high_lep_bus_shelters_manbx %>% as_tibble() %>%
 The following `r as.character(nrow(high_lep_bus_shelters_manbx))` bus shelters are located in the tracts in Manhattan and the Bronx with the highest (`r as.character(pct * 100)`th percentile) proportions of limited english proficiency. Again, census tracts with extremely low population (often parks, cemeteries and other such areas) have been removed prior to calculation.
 
 
-```{r, bus_shelters_lep_plot}
+```{r bus_shelters_lep_plot}
 tmap_mode("view")
   tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
   tm_shape(nyc_sds, point.per = "feature", 
@@ -942,7 +940,7 @@ kable(shelter_table, caption = "Bus shelters in proportionally high-LEP househol
 The entire table can be copied and pasted into a spreadsheet and will retain its formatting.
 \  
 
-```{r, bus_routes}
+```{r bus_routes}
 
 
 # Create a subset of buses that just run in Manhattan and the Bronx
@@ -971,7 +969,7 @@ manbx_bus_routes_with_lep %<>%
 In addition to advertising on the bus stops located within the highest-proportion LEP census tracts in New York, placing advertisements for the school on the bus lines passing near the most LEP households is another strategy. Below are the top `r nrow(manbx_bus_routes_with_lep)` routes in Manhattan and the Bronx, by the number of Low English Proficiency households they pass by (total LEP household counts of the census tracts they pass through):
 
 
-```{r, bus_route_lep_plot}
+```{r bus_route_lep_plot}
 
 
 tmap_mode("view")
@@ -1021,7 +1019,7 @@ tmap_mode("view")
 ```
 \  
 \  
-```{r, bus_route_lep_table}
+```{r bus_route_lep_table}
 
 manbx_bus_routes_with_lep_kable <- manbx_bus_routes_with_lep %>% 
   dplyr::select(`Route ID`=route_id, 
@@ -1044,7 +1042,7 @@ Though data has not been collected over sufficient years to make an authoritativ
 
 The below table outlines the current application to registration performance:
 
-```{r, app_to_reg}
+```{r app_to_reg}
 
 recruitment_data %>% 
   st_drop_geometry() %>% 
@@ -1065,7 +1063,7 @@ recruitment_data %>%
   
 Here, the below outlines the estimated applications that might be necessary to hit a target recruitment. This could be used as a hypothesis to test in coming years as further data comes in. A better approach could be looking at application to registration performance in top recruiting neighborhoods to see how they perform over time if recruitment efforts are focused in these neighborhoods over others, or to test whether increased or diversified efforts in underperforming neighborhoods may result in better performance in those areas. 
 
-```{r, applications_needed_to_reach_target}
+```{r applications_needed_to_reach_target}
 
 recruitment_data %>% 
   filter(year %in% c(2017, 2018)) %>% 
