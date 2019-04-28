@@ -39,7 +39,7 @@ library(raster)
 library(tidyverse)
 library(BAMMtools) # for getting jenks natural breaks
 library(pdftools)
-library(tabulizer)
+# library(tabulizer)
 ```
 
 
@@ -294,9 +294,9 @@ man_bx_bbox <- st_bbox(st_union(manhattan_sf, bronx_sf))
 # II recruitment data.
 
 # Read in the data from each sheet
-sheet_19 <- read_xlsx("data/historical_recruitment_data_0319.xlsx")
-sheet_18 <- read_xlsx("data/historical_recruitment_data.xlsx", sheet = 2)
-sheet_17 <- read_xlsx("data/historical_recruitment_data.xlsx", sheet = 3)
+sheet_19 <- read_xlsx("schooldata/historical_recruitment_data_0319.xlsx")
+sheet_18 <- read_xlsx("schooldata/historical_recruitment_data.xlsx", sheet = 2)
+sheet_17 <- read_xlsx("schooldata/historical_recruitment_data.xlsx", sheet = 3)
 
 # The below three commands clean and standardize the colnames for each sheet's
 # vars
@@ -1080,50 +1080,5 @@ recruitment_data %>%
   kable(., caption = "Applications needed to reach target enrollment, based on 2017-2018 recruitment performance") %>% 
   kable_styling(bootstrap_options = "striped")
   
-```
-
-
-
-```{r, housing_dataset, include=FALSE}
-
-nycha_stats <- read_csv("https://data.cityofnewyork.us/api/views/evjd-dqpz/rows.csv?accessType=DOWNLOAD")
-
-
-nycha_sf <- st_read("https://data.cityofnewyork.us/resource/5j2e-zhmb.geojson",
-                    stringsAsFactors = F) %>% 
-  st_transform(crs = wgs84_crs)
-
-
-nycha_developments <- inner_join(nycha_sf, nycha_stats, by = c("tds_num" = "TDS#"))
-
-tmap_mode('view')
-tm_tiles(providers$CartoDB.PositronNoLabels) + 
-  tm_shape(nyc_sds, point.per = "feature") +
-    tm_borders(alpha = 0.7) +
-    tm_text(text = "school_dist") +
-  tm_shape(nycha_developments) + 
-    tm_borders(alpha = 0.2) +
-    tm_fill(col = "POPULATION PUBLIC HOUSING",
-          id="tractname",
-          style = "jenks",
-          title = "Pub. Housing Pop",
-          popup.vars = c("TDS#"="tds_num",
-                         "Pub. Housing Population"="POPULATION PUBLIC HOUSING",
-                         "Development"="DEVELOPMENT")) +
-    tm_view(set.view = c(-73.86652, 40.85263, 11),
-          set.zoom.limits = c(12,14)) + 
-  tm_layout(outer.margins = 20)
-# 
-# 
-# 
-# nycha_addresses_text <- pdftools::pdf_text("https://www1.nyc.gov/assets/nycha/downloads/pdf/Address-Guide-01142019.pdf")
-# 
-# text <- readtext::readtext("https://www1.nyc.gov/assets/nycha/downloads/pdf/Address-Guide-01142019.pdf")
-# 
-# testtt <- extract_tables("https://www1.nyc.gov/assets/nycha/downloads/pdf/Address-Guide-01142019.pdf",
-#                          output = "data.frame")
-# 
-# testtt
-
 ```
 

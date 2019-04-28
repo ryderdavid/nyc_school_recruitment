@@ -39,9 +39,9 @@ library(raster)
 library(tidyverse)
 library(BAMMtools) # for getting jenks natural breaks
 library(pdftools)
-library(tabulizer)
-library(tabulizerjars)
-library(rJava)
+# library(tabulizer)
+# library(tabulizerjars)
+# library(rJava)
 ```
 
 
@@ -310,9 +310,9 @@ man_bx_bbox <- st_bbox(st_union(manhattan_sf, bronx_sf))
 # II recruitment data.
 
 # Read in the data from each sheet
-sheet_1 <- read_xlsx("data/historical_recruitment_data.xlsx", sheet = 1)
-sheet_2 <- read_xlsx("data/historical_recruitment_data.xlsx", sheet = 2)
-sheet_3 <- read_xlsx("data/historical_recruitment_data.xlsx", sheet = 3)
+sheet_1 <- read_xlsx("schooldata/historical_recruitment_data.xlsx", sheet = 1)
+sheet_2 <- read_xlsx("schooldata/historical_recruitment_data.xlsx", sheet = 2)
+sheet_3 <- read_xlsx("schooldata/historical_recruitment_data.xlsx", sheet = 3)
 
 # The below three commands clean and standardize the colnames for each sheet's
 # vars
@@ -387,9 +387,6 @@ recruitment_data %<>%
   # add a logical variable for whether applicant was registered or not
   mutate(registered = ifelse(!is.na(registration_completed_date), T, F))
 
-
-# One hand fix to correct a typo in data entry
-# recruitment_data[recruitment_data$zip == "1.047", "zip"] <- "10473"
 
 # recruitment data for manhattan and bx only
 recruitment_data_man_bx <- recruitment_data %>% 
@@ -694,44 +691,44 @@ if((schools_percentile * 100) %% 10 == 1) {
 ### Limited English Proficiency Households
 Below is the distribution of English Language Learner recruitment among districts and schools in New York, focusing on Manhattan and the Bronx. The second plot highlights those schools recruiting ELL students at the `r paste(sch_pctile_ord)` percentile relative to all schools in New York.
 
-```{r}
+<!-- ```{r} -->
 
-# tmap_mode("plot")
-# 
-# plot1 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +
-#   tm_fill(col = "grey90") + 
-#   tm_shape(districts_demo_snapshot_1718, point.per = "feature") + 
-#   tm_borders() + 
-#   tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") +
-#   tm_text("school_dist") +
-#   tm_layout(legend.position = c("left", "top"),
-#             title = "Percentage of ELL enrollment by district, 2017-18",
-#             title.bg.color = "white", title.bg.alpha = 0.6)
-# 
-# # Plot schools in determined percentile for ELL enrollment in Manhattan and The Bronx:
-# high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>% 
-#   filter(pct_ell > quantile(.$pct_ell, schools_percentile)) %>% 
-#   filter(boro %in% c("X", "M")) %>%
-#   .[, c("dbn", "school_name", "total_enrollment", "pct_ell")]
-# 
-# plot2 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + 
-#   tm_fill(col = "grey90") +
-#   tm_shape(nyc_sds) + tm_borders() + tm_fill(alpha = 0) +
-#   tm_shape(high_ell_schools_man_bx) + 
-#   tm_symbols(col = "red",
-#              size = "pct_ell",
-#              title.size = "% ELL enrollment",
-#              perceptual = T,
-#              sizes.legend = c(40,60,80,100), legend.size.is.portrait = F) + 
-#   tm_layout(legend.position = c("right", "bottom"),
-#             legend.bg.color = "white", legend.bg.alpha = 1, legend.frame = "black",
-#             title = paste(sch_pctile_ord, 
-#                      "percentile ELL-enrolling schools, Manhattan/Bronx"),
-#             title.position = c("center", "top"),
-#             title.bg.color = "white", title.bg.alpha = 0.6)
-# 
-# tmap_arrange(plot1, plot2, ncol = 2, asp = 1)
-```
+<!-- # tmap_mode("plot") -->
+<!-- #  -->
+<!-- # plot1 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) + -->
+<!-- #   tm_fill(col = "grey90") +  -->
+<!-- #   tm_shape(districts_demo_snapshot_1718, point.per = "feature") +  -->
+<!-- #   tm_borders() +  -->
+<!-- #   tm_fill(col = "pct_ell", title = "% ELL Enrollment, 2017-18", palette = "BuGn") + -->
+<!-- #   tm_text("school_dist") + -->
+<!-- #   tm_layout(legend.position = c("left", "top"), -->
+<!-- #             title = "Percentage of ELL enrollment by district, 2017-18", -->
+<!-- #             title.bg.color = "white", title.bg.alpha = 0.6) -->
+<!-- #  -->
+<!-- # # Plot schools in determined percentile for ELL enrollment in Manhattan and The Bronx: -->
+<!-- # high_ell_schools_man_bx <- schools_demo_snapshot_1718 %>%  -->
+<!-- #   filter(pct_ell > quantile(.$pct_ell, schools_percentile)) %>%  -->
+<!-- #   filter(boro %in% c("X", "M")) %>% -->
+<!-- #   .[, c("dbn", "school_name", "total_enrollment", "pct_ell")] -->
+<!-- #  -->
+<!-- # plot2 <- tm_shape(nyc_area_zips, bbox = c(manhattan_sf, bronx_sf)) +  -->
+<!-- #   tm_fill(col = "grey90") + -->
+<!-- #   tm_shape(nyc_sds) + tm_borders() + tm_fill(alpha = 0) + -->
+<!-- #   tm_shape(high_ell_schools_man_bx) +  -->
+<!-- #   tm_symbols(col = "red", -->
+<!-- #              size = "pct_ell", -->
+<!-- #              title.size = "% ELL enrollment", -->
+<!-- #              perceptual = T, -->
+<!-- #              sizes.legend = c(40,60,80,100), legend.size.is.portrait = F) +  -->
+<!-- #   tm_layout(legend.position = c("right", "bottom"), -->
+<!-- #             legend.bg.color = "white", legend.bg.alpha = 1, legend.frame = "black", -->
+<!-- #             title = paste(sch_pctile_ord,  -->
+<!-- #                      "percentile ELL-enrolling schools, Manhattan/Bronx"), -->
+<!-- #             title.position = c("center", "top"), -->
+<!-- #             title.bg.color = "white", title.bg.alpha = 0.6) -->
+<!-- #  -->
+<!-- # tmap_arrange(plot1, plot2, ncol = 2, asp = 1) -->
+<!-- ``` -->
 
 
 
