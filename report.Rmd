@@ -1,0 +1,1057 @@
+---
+title: "High School Recruitment Report"
+author: "Ryder Cobean"
+output: 
+  output: html_document
+---
+
+<style>
+.leaflet {
+    margin: auto;
+}
+</style>
+
+
+
+This report attempts to answer a number of questions for a School in the South Bronx, New York City. These analyses were done based off of data from that school. All data had no individual student identifiers. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.path='Figs/', fig.align="center", echo = F, warning = F, message = F)
+
+library(sf)
+library(leaflet)
+library(revgeo)
+library(rmarkdown)
+library(kableExtra)
+library(magrittr)
+library(viridis)
+library(viridisLite)
+library(tmaptools)
+library(tmap)
+library(ggplot2)
+library(readxl)
+library(tigris)
+library(tidycensus)
+library(acs)
+library(tidyverse)
+library(BAMMtools) # for getting jenks natural breaks
+```
+
+
+```{r data_prep, results='hide', cache=T}
+
+if(!dir.exists("data")) {
+  dir.create("data/downloads", recursive = T)
+} else if (!dir.exists("data/downloads")) {
+  dir.create("data/downloads")
+}
+
+
+# if(Sys.getenv("CENSUS_API_KEY") == "") {
+#   
+#   census_api_key(getPass("Enter U.S. census API key to install: "), install = T, overwrite = T)
+#   readRenviron("~/.Renviron")
+#   
+# }
+
+
+##### SET A REFERENCE VARIABLE HERE: CRS FOR ALL LAYERED PLOTS ##### use this
+# CRS to transform projeections of any other layer being used when necessary
+
+wgs84_crs <-  "+proj=longlat +datum=WGS84 +no_defs"
+
+
+
+# Download shapefiles for NYC area ZCTAs to render as background layer
+options(tigris_use_cache = T)
+nyc_area_zips <- 
+  zctas(cb = T, starts_with = c('070','071','072','073','074',
+                                '075','076','100','101','102',
+                                '103','104','105','106','107',
+                                '108','109','110','111','112',
+                                '113','114','115','116')) %>% 
+  as("sf") %>%
+  st_transform(crs = wgs84_crs)
+
+
+# get a simple block of NJ coastline to add to baselayers of maps
+nj_land <- nyc_area_zips %>% filter(str_detect(GEOID10, "^07")) %>% st_union
+  
+
+# Filter just the ZCTAs we're interested in - Man/Bx
+man_bx_zips <- nyc_area_zips %>% filter(str_detect(GEOID10, "^100|^101|^102|^103|^104"))
+
+
+# Get NYCHA location geojson
+nycha_locations <- 
+  st_read("https://data.cityofnewyork.us/resource/5j2e-zhmb.geojson", stringsAsFactors = F) %>% 
+  st_transform(crs = wgs84_crs)
+
+
+# NYC's SD geojson file only pulls in data as characters, which leads sf to read
+# them as factors which breaks all attempts at analysis. forcing NOT to factors
+# brings everything in as characters, which lets us cast each attribute to
+# numeric
+nyc_sds <- st_read("https://data.cityofnewyork.us/resource/cuae-wd7h.geojson", stringsAsFactors = F) %>% 
+  st_transform(crs = wgs84_crs) %>% 
+  dplyr::select(-shape_area, -shape_leng) %>% 
+  mutate(school_dist = as.integer(school_dist)) %>% 
+  # mutate(school_dist = as.factor(school_dist)) %>% 
+  group_by(school_dist) %>% 
+  summarize()
+
+
+
+
+districts_demo_snapshot <- 
+  read_csv("https://data.cityofnewyork.us/resource/dndd-j759.csv") %>% 
+  rename_all(
+    funs(
+      str_to_lower(.) %>% 
+      str_replace_all(., "\\s", "_") %>% 
+      str_replace_all(., "#", "num") %>% 
+      str_replace_all(., "%", "pct") %>% 
+      str_replace_all(., "\\(|\\)", "") %>% 
+      str_replace_all(., "\\&", "") %>% 
+      str_replace_all(., "_{2,}", "_")
+    )
+  ) %>% 
+  mutate(administrative_district = as.integer(administrative_district)) %>% 
+  # mutate(administrative_district = as.factor(administrative_district)) %>% 
+  rename(num_swd = students_with_disabilities_1, 
+         pct_swd = students_with_disabilities_2,
+         num_ell = english_language_learners_1, 
+         pct_ell = english_language_learners_2, 
+         num_pov = poverty_1, 
+         pct_pov = poverty_2) %>% 
+  inner_join(nyc_sds, ., 
+             by = c("school_dist" = "administrative_district"))
+
+districts_demo_snapshot_1718 <- districts_demo_snapshot %>% 
+  filter(year == "2017-18")
+
+
+# Shapefile of public school points - This is an ESRI shape file of school point
+# locations based on the official address.  It includes some additional basic
+# and pertinent information needed to link to other data sources. It also
+# includes some basic school information such as Name, Address, Principal, and
+# Principal’s contact information.
+
+download.file(url = "https://data.cityofnewyork.us/download/jfju-ynrr/application%2Fzip", destfile = "data/downloads/school_points.zip")
+unzip("data/downloads/school_points.zip", exdir = "data/school_points", overwrite = T)
+
+school_points <- st_read("data/school_points/Public_Schools_Points_2011-2012A.shp") %>% 
+  rename_all(str_to_lower) %>% 
+  # clean up trailing unicode characters in ats_code
+  mutate(ats_code = str_sub(ats_code, 1, 6)) %>% 
+  mutate(principal = str_to_title(principal, locale = "en")) %>% 
+  st_transform(school_points, crs = wgs84_crs)
+
+# School demographic data from NYC gov't. Will merge with above points data.
+schools_demo_snapshot <- 
+  read_csv("https://data.cityofnewyork.us/api/views/s52a-8aq6/rows.csv?accessType=DOWNLOAD&bom=true&format=true") %>% 
+  rename_all(
+    funs(
+      str_to_lower(.) %>% 
+      str_replace_all(., "\\s", "_") %>% 
+      str_replace_all(., "#", "num") %>% 
+      str_replace_all(., "%", "pct") %>% 
+      str_replace_all(., "\\(|\\)", "") %>% 
+      str_replace_all(., "\\&", "") %>% 
+      str_replace_all(., "_{2,}", "_")
+    )
+  ) %>% 
+  rename(num_swd = num_students_with_disabilities, 
+         pct_swd = pct_students_with_disabilities,
+         num_ell = num_english_language_learners, 
+         pct_ell = pct_english_language_learners,
+         num_pov = num_poverty, 
+         pct_pov = pct_poverty) %>% 
+  inner_join(school_points, ., by = c('ats_code' = 'dbn'))
+  
+# filter out old years of schools demo snapshot
+schools_demo_snapshot_1718 <- schools_demo_snapshot %>% filter(year == "2017-18")
+
+
+
+
+# The below sets up the necessary shapefile and function to clip any shapefile
+# to the NYC shoreline (for example, the US Census Tract boundaries, which
+# extend into the Hudson and East Rivers). Passing your shapefile and nyc_water
+# to st_erase will clip them to the shoreline. Curiously, 
+st_erase <- function(x, y) {
+  st_difference(x, st_union(st_combine(y)))
+}
+
+bx_water <- tigris::area_water("NY", county = "Bronx", class = "sf")
+bk_water <- tigris::area_water("NY", county = "Kings", class = "sf")
+qn_water <- tigris::area_water("NY", county = "Queens", class = "sf")
+st_water <- tigris::area_water("NY", county = "Richmond", class = "sf")
+ny_water <- tigris::area_water("NY", county = "New York", year = 2017, class = "sf")
+
+nyc_water <- 
+  st_union(c(bx_water$geometry, 
+             bk_water$geometry, 
+             qn_water$geometry, 
+             st_water$geometry, 
+             ny_water$geometry)) %>%
+  st_transform(crs = wgs84_crs)
+
+
+# Get tracts (unclipped to shoreline)
+trct <- 
+  tigris::tracts(state = "NY", 
+                 county = c('Bronx',
+                            'Kings',
+                            'New York',
+                            'Queens',
+                            'Richmond')) %>% 
+  as("sf") %>%  # cast to sf
+  st_transform(crs=wgs84_crs) %>% 
+  
+  # make easier to work with with county name
+  mutate(countyname = recode(.$COUNTYFP, 
+                             `005`="Bronx", 
+                             `047`="Kings", 
+                             `061`="New York", 
+                             `081`="Queens", 
+                             `085`="Richmond")) %>% 
+  
+  mutate(tractname = paste(NAMELSAD, ", ",
+                           countyname,
+                           " County",
+                           sep = ""))
+
+nyc_tracts <- st_erase(trct, nyc_water) # erase water from edges 
+
+
+# NYC School Zones - at https://data.cityofnewyork.us/Education/2017-2018-School-Zones/ghq4-ydq4
+nyc_hs_zones <- read_sf("https://data.cityofnewyork.us/resource/9hw3-gi34.geojson") %>% 
+  st_transform(., crs = wgs84_crs)
+
+nyc_ms_zones <- read_sf("https://data.cityofnewyork.us/resource/jxpn-gg5q.geojson") %>% 
+  st_transform(., crs = wgs84_crs)
+
+nyc_es_zones <- read_sf("https://data.cityofnewyork.us/resource/xehh-f7pi.geojson") %>% 
+  st_transform(., crs = wgs84_crs)
+
+# NYC bus routes
+bus_url <- "http://faculty.baruch.cuny.edu/geoportal/data/nyc_transit/may2018/bus_routes_nyc_may2018.zip"
+
+
+download.file(bus_url, "data/downloads/bus_routes_nyc_may2018.zip", cacheOK = T)
+unzip("data/downloads/bus_routes_nyc_may2018.zip", exdir = "data/bus_routes", overwrite = T)
+nyc_bus_routes <- st_read("data/bus_routes/bus_routes_nyc_may2018.shp")
+nyc_bus_routes <- st_transform(nyc_bus_routes, crs = wgs84_crs)
+
+
+# merge bus routes by route (directions currently their own shapes)
+nyc_bus_routes %<>% group_by(route_id, route_shor, route_long, color) %>% 
+  summarize() %>% ungroup()
+
+# NYC bus shelters
+nyc_bus_shelters <- 
+  st_read("https://data.cityofnewyork.us/api/geospatial/qafz-7myz?method=export&format=GeoJSON") %>% 
+  st_transform(., crs=wgs84_crs)
+
+# nyc_bus_shelters$location <- str_to_title(nyc_bus_shelters$location, locale = "en")
+
+nyc_bus_shelters %<>% mutate(location = str_to_title(nyc_bus_shelters$location, locale = "en"),
+                            coords = paste(latitude, longitude, sep = ", "))
+
+
+# NYC Neighborhood Tabulation Areas (NTAs):
+nyc_ntas <- st_read("https://data.cityofnewyork.us/resource/93vf-i5bz.geojson") %>% 
+  st_transform(., crs = wgs84_crs)
+
+
+manhattan_sf <- nyc_ntas %>% filter(boroname == "Manhattan") %>% st_union()
+bronx_sf <- nyc_ntas %>% filter(boroname == "Bronx") %>% st_union()
+brooklyn_sf <- nyc_ntas %>% filter(boroname == "Brooklyn") %>% st_union()
+queens_sf <- nyc_ntas %>% filter(boroname == "Queens") %>% st_union()
+staten_sf <- nyc_ntas %>% filter(boroname == "Staten Island") %>% st_union()
+
+nyc_sf <- st_union(c(manhattan_sf, bronx_sf, queens_sf, brooklyn_sf, staten_sf))
+
+nyc_area_land <- st_union(nj_land, nyc_sf)
+
+# set a bbox for common views of manhattan and bronx together
+man_bx_bbox <- st_bbox(st_union(manhattan_sf, bronx_sf))
+
+
+
+
+
+
+# HUM II RECRUITMENT DATA ------------------------------------------------------
+# This project requires the spreadsheet "historical_recruitment_data.xlsx" - HUM
+# II recruitment data.
+
+# Read in the data from each sheet
+sheet_19 <- read_xlsx("schooldata/historical_recruitment_data_0319.xlsx")
+sheet_18 <- read_xlsx("schooldata/historical_recruitment_data.xlsx", sheet = 2)
+sheet_17 <- read_xlsx("schooldata/historical_recruitment_data.xlsx", sheet = 3)
+
+# The below three commands clean and standardize the colnames for each sheet's
+# vars
+
+names(sheet_17) <- 
+  str_to_lower(str_replace_all(names(sheet_17), 
+                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
+  str_replace_all("[:punct:]+", "_") %>% 
+  str_replace_all("^[:punct:]|[:punct:]$", "")
+
+names(sheet_18) <- 
+  str_to_lower(str_replace_all(names(sheet_18), 
+                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
+  str_replace_all("[:punct:]+", "_") %>% 
+  str_replace_all("^[:punct:]|[:punct:]$", "")
+
+names(sheet_19) <- 
+  str_to_lower(str_replace_all(names(sheet_19), 
+                             "[^[:alnum:]]|[^[:ascii:]]", "_")) %>% 
+  str_replace_all("[:punct:]+", "_") %>% 
+  str_replace_all("^[:punct:]|[:punct:]$", "")
+
+
+# Select just the cols we need - location and application pd. Also commonly
+# format zip codes (sheet two was numeric, sheets 1 and 3 were strings with
+# trailing nonsignificant 0)
+sheet_19_trimmed <- 
+  sheet_19 %>% mutate(studentaddress_zip =
+                     str_sub(as.character(studentaddress_zip), 1, 5))
+sheet_18_trimmed <- 
+  sheet_18 %>% mutate(studentaddress_zip = 
+                     str_sub(as.character(studentaddress_zip), 1, 5))
+
+sheet_17_trimmed <- 
+  sheet_17 %>% mutate(studentaddress_zip =
+                     str_sub(as.character(studentaddress_zip), 1, 5))
+
+# Combine the three sheets
+
+recruitment_data <- 
+  bind_rows(sheet_17_trimmed, 
+            sheet_18_trimmed, 
+            sheet_19_trimmed) # used to be recruitment_data_man_bx_merged
+
+# Clean up unneeded vars
+rm(list = c("sheet_1", 
+            "sheet_1_trimmed", 
+            "sheet_2", 
+            "sheet_2_trimmed", 
+            "sheet_3", 
+            "sheet_3_trimmed"))
+
+
+# Strip extraneous year from enrollment period and rename to "year", rename
+# studentaddress_zip to zip, then cast year as numeric
+recruitment_data %<>% 
+  mutate(enrollment_period = str_sub(enrollment_period, 1, 4)) %>% 
+  rename(year = enrollment_period) %>% 
+  filter(!is.na(studentaddress_coordinates)) %>% # to remove one pesky record in 2018...
+  separate(studentaddress_coordinates, c("lat", "long"), sep = ",") %>% 
+  mutate(long = as.numeric(long), lat = as.numeric(lat)) %>% 
+  
+  # convert to sf and intersect with tracts, zips, and ntas shapefiles
+  st_as_sf(coords = c("long", "lat"), 
+           crs    = wgs84_crs) %>% 
+  st_intersection(., nyc_area_zips) %>% 
+  st_intersection(., nyc_ntas) %>% 
+  st_intersection(., nyc_tracts) %>% 
+  st_intersection(., nyc_sds) %>% 
+  
+  # rename and reclass key geography variables
+  mutate(year        = as.integer(year),
+         district    = as.integer(district),
+         zip         = as.integer(GEOID10),
+         tractname   = as.factor(paste(NAMELSAD, boroname, sep = ", "))) %>% 
+  
+  # add a logical variable for whether applicant was registered or not
+  mutate(registered = ifelse(!is.na(registration_completed_date), T, F))
+
+
+# One hand fix to correct a typo in data entry
+# recruitment_data[recruitment_data$zip == "1.047", "zip"] <- "10473"
+
+# recruitment data for manhattan and bx only
+recruitment_data_man_bx <- recruitment_data %>% 
+  filter(boroname %in% c("Bronx", "Manhattan"))
+  # filter(zip %in% seq(10000, 10299) | zip %in% seq(10400, 10499))
+
+# SF of application points
+application_points <- recruitment_data # %>% 
+  # mutate(registered = ifelse(!is.na(registration_completed_date), T, F))
+
+# SF of registration points - just those that filtered as registered
+registration_points <- application_points %>% 
+  dplyr::select(-registration_completed_date) %>% filter(registered == T) %>% 
+  dplyr::select(-registered)
+
+```
+
+
+```{r functions, results='hide', cache=T}
+
+# Used in bus route chunk.
+
+st_intersects_tally_attr <-
+  function(x = NULL,
+           y = NULL,
+           attribute = NULL) {
+    require(sf)
+    
+    # a <- attribute
+    a <- attribute
+    
+    
+    # a list of x's length with each record containing a vector of indices of y's
+    # records that intersect with that record in x
+    xy <- st_intersects(x, y)
+    
+    
+    attr_n <- c() # empty vector to fill
+    for (r in 1:length(xy)) {
+      n <- 0
+      
+      if (length(xy[[r]]) == 0) {
+        n <- 0
+        
+      } else {
+        for (i in 1:length(xy[[r]])) {
+          n <- n + st_drop_geometry(y)[i, a]
+          
+        }
+        
+      }
+      
+      attr_n <- c(attr_n, n)
+      
+    }
+    
+    
+    return(x %>% bind_cols((!!a) := attr_n))
+    
+  }
+```
+
+
+## Historical Recruitment Data
+
+```{r historical_recruitment}
+
+# create a tidy set of application totals of this with all years
+recruitment_by_tract_tidy <- 
+  recruitment_data %>% 
+  st_drop_geometry() %>% 
+  count(GEOID, year, registered) %>% 
+  complete(GEOID, year, registered, fill = list(n = 0)) %>% 
+  mutate(pct_total = n / sum(n) * 100) %>% 
+  group_by(year) %>% 
+  mutate(pct_yr = n / sum(n) * 100) %>% 
+  ungroup() %>% 
+  inner_join(nyc_tracts, ., by = c("GEOID" = "GEOID"))
+
+
+recruitment_by_sd_tidy <- 
+  recruitment_data %>% 
+  st_drop_geometry %>% 
+  count(school_dist, year, registered) %>% 
+  complete(school_dist, year, registered, fill = list(n = 0)) %>% 
+  mutate(pct_total = n / sum(n)) %>% 
+  group_by(year) %>% 
+  mutate(pct_yr = n / sum(n) * 100) %>% 
+  ungroup() %>% 
+  inner_join(nyc_sds, ., by = c("school_dist" = "school_dist"))
+
+applications_by_tract_yearly_totals <- 
+  recruitment_by_tract_tidy %>% 
+  group_by(GEOID, tractname, year) %>% 
+  summarize(n = sum(n)) %>% 
+  group_by(year) %>% 
+  mutate(pct_yr = n / sum(n) * 100) %>% 
+  ungroup() %>% 
+  mutate(pct_total = n / sum(n) * 100) %>%
+  filter(n > 0)
+
+apps_jenks_breaks <- applications_by_tract_yearly_totals$n %>% getJenksBreaks(6)
+
+registrations_by_tract_yearly_totals <-
+  recruitment_by_tract_tidy %>%
+  filter(registered == T, n > 0)
+
+regs_jenks_breaks <- getJenksBreaks(registrations_by_tract_yearly_totals$n, 6)
+
+```
+
+### Application Data {.tabset}
+
+Below are the distributions of applications received from the `r applications_by_tract_yearly_totals$year %>% min()`-`r (applications_by_tract_yearly_totals$year %>% min() + 1)` to the `r applications_by_tract_yearly_totals$year %>% max()`-`r applications_by_tract_yearly_totals$year %>% max() + 1` school years, arranged by NYC Census Tract. In total, `r applications_by_tract_yearly_totals$n %>% sum()` applications were received from `r applications_by_tract_yearly_totals$tractname %>% unique() %>% length()` tracts.
+
+
+```{r applications_plot}
+
+tmap_mode("view")
+
+a_2017 <- 
+  tm_tiles(providers$CartoDB.PositronNoLabels) + 
+    tm_shape(nyc_sds, point.per = "feature") +
+      tm_borders(alpha = 0.7) +
+      tm_text(text = "school_dist") +
+    tm_shape(applications_by_tract_yearly_totals %>% 
+               filter(year == 2017)) + 
+      tm_borders(alpha = 0.2) +
+      tm_fill(col = "n",
+            id="tractname",
+            breaks = apps_jenks_breaks,
+            title = "2017 Apps",
+            popup.vars = c("Applications"="n",
+                           "% of Year's Applications"="pct_yr")) +
+      tm_view(set.view = c(-73.86652, 40.85263, 11),
+            set.zoom.limits = c(11,14)) + 
+    tm_layout(outer.margins = 20)    
+
+a_2018 <- 
+  tm_tiles(providers$CartoDB.PositronNoLabels) + 
+    tm_shape(nyc_sds, point.per = "feature") +
+      tm_borders(alpha = 0.7) +
+      tm_text(text = "school_dist") +
+    tm_shape(applications_by_tract_yearly_totals %>% 
+               filter(year == 2018)) + 
+      tm_borders(alpha = 0.2) +
+      tm_fill(col = "n",
+            id="tractname",
+            breaks = apps_jenks_breaks,
+            title = "2018 Apps",
+            popup.vars = c("Applications"="n",
+                           "% of Year's Applications"="pct_yr")) +
+      tm_view(set.view = c(-73.86652, 40.85263, 11),
+            set.zoom.limits = c(11,14)) + 
+    tm_layout(outer.margins = 20)
+
+a_2019 <- 
+  tm_tiles(providers$CartoDB.PositronNoLabels) + 
+    tm_shape(nyc_sds, point.per = "feature") +
+      tm_borders(alpha = 0.7) +
+      tm_text(text = "school_dist") +
+    tm_shape(applications_by_tract_yearly_totals %>% 
+               filter(year == 2019)) + 
+      tm_borders(alpha = 0.2) +
+      tm_fill(col = "n",
+            id="tractname",
+            breaks = apps_jenks_breaks,
+            title = "2019 Apps",
+            popup.vars = c("Applications"="n",
+                           "% of Year's Applications"="pct_yr")) +
+      tm_view(set.view = c(-73.86652, 40.85263, 11),
+            set.zoom.limits = c(11,14)) + 
+    tm_layout(outer.margins = 20)
+
+```
+  
+#### 2017 Applications  
+  
+```{r}
+a_2017
+```
+
+#### 2018 Applications  
+  
+```{r}
+a_2018
+```
+
+#### 2019 Applications  
+  
+```{r}
+a_2019
+```
+
+### Registration Data {.tabset}
+
+Below are the distributions of applications that resulted in the student being accepted and registered. The registration data currently tracks the `r registrations_by_tract_yearly_totals$year %>% min()`-`r registrations_by_tract_yearly_totals$year %>% min() + 1` to the `r registrations_by_tract_yearly_totals$year %>% max()`-`r registrations_by_tract_yearly_totals$year %>% max() + 1` school years, with `r registrations_by_tract_yearly_totals$n %>% sum()` registrations in total occurring from `r registrations_by_tract_yearly_totals$tractname %>% unique() %>% length()` tracts in New York City.
+
+```{r registrations_plot}
+
+tmap_mode("view")
+
+
+regs_2017 <- tm_tiles(providers$CartoDB.PositronNoLabels) +
+  tm_shape(nyc_sds, point.per = "feature") +
+    tm_borders(alpha = 0.5) +
+    tm_text(text = "school_dist") +
+  tm_shape(registrations_by_tract_yearly_totals %>%
+             filter(year == 2017)) +
+    tm_borders(alpha = 0.2) +
+
+    tm_fill(col = "n",
+            palette = "YlOrBr",
+            id="tractname",
+            breaks = regs_jenks_breaks,
+            title = "2017 Regs",
+            popup.vars = c("Registrations"="n",
+                           "% of Year's Registrations"="pct_yr")) +
+    tm_view(set.view = c(-73.86652, 40.85263, 11),
+          set.zoom.limits = c(11,14))
+
+regs_2018 <- tm_tiles(providers$CartoDB.PositronNoLabels) +
+  tm_shape(nyc_sds, point.per = "feature") +
+    tm_borders(alpha = 0.5) +
+    tm_text(text = "school_dist") +
+  tm_shape(registrations_by_tract_yearly_totals %>%
+             filter(year == 2018)) +
+    tm_borders(alpha = 0.2) +
+
+    tm_fill(col = "n",
+            palette = "BuGn",
+            id="tractname",
+            breaks = regs_jenks_breaks,
+            title = "2018 Regs",
+            popup.vars = c("Registrations"="n",
+                           "% of Year's Registrations"="pct_yr")) +
+    tm_view(set.view = c(-73.86652, 40.85263, 11),
+          set.zoom.limits = c(11,14))
+
+
+
+```
+  
+#### 2017 Registrations
+```{r}
+regs_2017
+```
+
+#### 2018 Registrations
+```{r}
+regs_2018
+```
+
+
+  
+### Application to Registration Performance {.tabset}
+
+```{r recruitment_performance_setup, include=F}
+
+tracts_by_recruitment_performance <- 
+  recruitment_data %>% 
+  count(year, GEOID, registered) %>% 
+  spread(key = registered, value = n, fill = 0) %>% 
+  complete(year, GEOID, fill = list(`TRUE` = 0, `FALSE` = 0)) %>% 
+  transmute(Year = year,
+            GEOID = GEOID,
+            Applied = `TRUE` + `FALSE`,
+            `Not Registered` = `FALSE`,
+            Registered = `TRUE`,
+            `Recruitment Rate` = ifelse(Applied == 0, 0, Registered / Applied))
+
+
+tracts_by_recruitment_performance <- 
+  recruitment_data %>% 
+  count(year, GEOID, registered) %>% 
+  spread(key = registered, value = n, fill = 0) %>% 
+  transmute(Year = year,
+            GEOID = GEOID,
+            Applied = `TRUE` + `FALSE`,
+            `Not Registered` = `FALSE`,
+            Registered = `TRUE`,
+            `Recruitment Rate` = ifelse(Applied == 0, 0, Registered / Applied)) %>% 
+  st_drop_geometry() %>% 
+  inner_join(., nyc_tracts, by = c("GEOID" = "GEOID")) %>% 
+  st_as_sf(.)
+
+# Applications to Registrations Rate Map:
+apps_to_regs_map <- function(years = seq(0,10000), 
+                             pal = "YlOrBr") {
+  
+  data <- tracts_by_recruitment_performance
+  years <- years
+  pal <- pal
+
+  data %<>%
+    filter(Year %in% years)
+
+  map_plot <-
+    tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) +
+    tm_shape(nyc_sds, point.per = "feature") +
+      tm_borders(alpha = 0.7) +
+      tm_text(text = "school_dist") +
+    tm_shape(data) +
+      tm_borders(alpha = 0.2) +
+      tm_fill(col = "Recruitment Rate",
+              palette = pal,
+              id = "tractname",
+              title =
+
+                # logic to handle whether years renders as
+                # YYYY-YY or just YYYY depending on whether
+                # multiple years are called in args
+                if (length(years) > 1) {
+                  paste("Regs:Apps, ", "\n", min(years), "-",
+                            substr(toString(max(years)), 3, 4),
+                            sep = "")
+                } else {
+                  paste("Apps:Regs, ", "\n",
+                        years,
+                        sep = "")
+                },
+
+              popup.vars =
+                c("Tract ID #"="GEOID",
+                  "Applied",
+                  "Registered",
+                  "Not Registered",
+                  "Recruitment Rate")) +
+      tm_view(set.view = c(-73.86652, 40.85263, 11),
+              set.zoom.limits = c(11,14)) +
+      tm_layout(outer.margins = 20)
+  
+  return(map_plot)
+  
+}
+
+```
+
+
+Below are a number of views of the recruitment performance, by different geographies.
+
+#### By School District, All Years
+
+Below is the comparative performance of recruitment in each of New York's `r nyc_sds %>% length()` school district boundaries, showing the number of total applications received and the number of registrations completed from those applications, per year, for the `r min(recruitment_by_sd_tidy$year)`-`r min(recruitment_by_sd_tidy$year) + 1` to the `r max(recruitment_by_sd_tidy$year)`-`r max(recruitment_by_sd_tidy$year) + 1` school years.
+
+
+```{r app_reg_performance}
+
+
+ggplot(recruitment_by_sd_tidy %>% 
+         mutate(school_dist = as.factor(school_dist))) + 
+  geom_bar(aes(x = school_dist, y = n, fill = registered), stat = "identity") +
+  ggtitle("Recruitment Performance by Applicant's School District", 
+          subtitle = "School Years Beginning 2017 through 2019") +
+  theme(plot.title      = element_text(hjust = 0.5),
+        plot.subtitle   = element_text(hjust = 0.5),
+        legend.position = "bottom") +
+  xlab("School District") + 
+  ylab("Count") +
+  facet_grid(year ~ .)
+
+
+
+
+```
+
+
+#### By Census Tracts, 2017
+
+Below are census tracts depicting rate of registration (total registrations / total applications, by applications originating in the census tract.)
+```{r}
+apps_to_regs_map(2017)
+```
+
+#### By Census Tracts, 2018
+
+Below are census tracts depicting rate of registration (total registrations / total applications, by applications originating in the census tract.)
+```{r}
+apps_to_regs_map(2018, "BuGn")
+```
+
+
+### Limited English Proficiency Households
+
+One angle for targetting recruitment efforts is examining the distribution of "limited English proficiency" households in New York. The [American Community Survey](https://www.census.gov/programs-surveys/acs/news/data-releases.html?# "American Community Survey 2017 Data Releases") tabulates limited English proficiency households by census tract, which are defined as households that do not solely speak English, in which at least one member is reported by the respondent to speak English "not very well."
+```{r lep_C16002_setup}
+
+# GET 2017 5YR ACS HOUSEHOLD LANGUAGE SPOKEN BY LIMITED ENGLISH SPEAKING STATUS
+options(tigris_use_cache = TRUE)
+lep_hh_by_tract_C16002 <- 
+  get_acs(geography = "tract", year = 2017, state = "NY", 
+          county = c("New York", "Bronx", "Richmond", "Queens", "Kings"),
+          output = "wide",
+          geometry = T,
+          variables = c(total_hh = "C16002_001E", 
+                        spanish_lep = "C16002_004E",
+                        indeur_lep = "C16002_007E",
+                        asnpacisl_lep = "C16002_010E",
+                        otherlang_lep = "C16002_013E",
+                        total_pop = "B01003_001E")) %>% 
+  st_transform(crs = wgs84_crs) %>% 
+  st_erase(., nyc_water)
+
+# get County name from longform tract name in NAME, get boro name from county names
+# Don't need this anymore since adding boro
+lep_hh_by_tract_C16002 %<>%
+  mutate(county_name = str_extract(NAME, "((?<=\\d, )[:graph:]+).+(?=\\sCounty)")) 
+
+# break out the data from the sf object and summarize across rows for each
+# language's limited english proficiency respondents. Make sure to not introduce
+# NaN's by dividing by zero!
+total_lep_by_tract <- lep_hh_by_tract_C16002 %>% as_tibble() %>% 
+  
+  # Filter out first percentile by pop tracts (often parks and cemeteries)
+  filter(total_pop >= quantile(total_pop, 0.1)) %>% 
+  
+  # get a variable summing LEP counts of each language group as total_lep
+  transmute(total_lep = dplyr::select(., spanish_lep, indeur_lep, 
+                                      asnpacisl_lep, otherlang_lep) %>% rowSums(),
+            
+            # and one for percentage. If total_lep is 0, hard enter 0% for pct
+            pct_lep = ifelse(total_lep == 0, 0, 100 * total_lep / total_hh), 
+            
+            #keep GEOID variable
+            GEOID = GEOID)
+
+# merge the data back into the geometry
+lep_hh_by_tract_C16002 <- inner_join(lep_hh_by_tract_C16002, 
+                                     total_lep_by_tract, 
+                                     by = c("GEOID" = "GEOID"))
+
+# prep for plotting: add school districts for each tract.
+lep_hh_by_tract_C16002 <- st_join(lep_hh_by_tract_C16002, nyc_sds)
+
+# filter to just Manhattan and Bronx
+lep_hh_by_tract_C16002_manbx <- filter(lep_hh_by_tract_C16002,
+                                       county_name %in% c("New York", "Bronx"))
+
+
+```
+
+The below interactive map shows the percentage of limited English proficiency households per census tract in NYC, with school district boundaries overlaid. __Note that this calculation has taken out of consideration those tracts with extremely low (first percentile and below) total tract populations.__ While some of those tracts have high proportions of limited English proficiency households, the total number of people living in them is extremely small, and most of them represent land that is largely a park or cemetery.
+
+```{r LEP_household_proportions_map}
+
+# Plot map of LEP household proportions by tract
+tmap_mode("view")
+tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
+  tm_shape(nyc_sds, point.per = "feature", bbox = man_bx_bbox) + 
+  tm_borders(alpha = 0.8) + 
+  tm_text("school_dist") +
+  tm_shape(lep_hh_by_tract_C16002) + 
+  tm_borders(alpha = 0.2) + 
+  tm_fill(col = "pct_lep", 
+          palette = "Reds",
+          title = "% LEP Households",
+          id = "NAME",
+          showNA = F,
+          popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
+                         "School District"="school_dist",
+                         "Total Households"="total_hh",
+                         "% LEP Households"="pct_lep"))
+
+
+
+```
+
+
+
+```{r bus_shelters_lep_setup, cache=T, dependson=c("setup", "functions"), include=FALSE}
+pct <- 0.80
+high_lep_hh_manbx <- 
+  lep_hh_by_tract_C16002_manbx %>% 
+  filter(pct_lep >= quantile(.$pct_lep, pct))
+
+
+# Get all bus shelters in NYC that are in pctile-th-percentile tracts by proportion
+# of LEP households
+
+
+# 
+# high_lep_bus_shelters_manbx <- 
+#   nyc_bus_shelters[high_lep_hh_manbx, ]
+
+high_lep_bus_shelters_manbx <- st_intersection(nyc_bus_shelters, high_lep_hh_manbx)
+
+# Prep a version of the dataframe of 
+shelter_table <- high_lep_bus_shelters_manbx %>% as_tibble() %>% 
+  transmute(`Shelter ID` = shelter_id, Coordinates = coords,
+            Location = paste(location, " at ", str_to_title(at_between), sep=""),
+            `Census Tract` = GEOID,
+            `LEP Households` = total_lep) %>% 
+  arrange(desc(`LEP Households`))
+
+```
+
+### Bus Shelters in High-LEP Census Tracts
+The following `r as.character(nrow(high_lep_bus_shelters_manbx))` bus shelters are located in the tracts in Manhattan and the Bronx with the highest (`r as.character(pct * 100)`th percentile) proportions of limited english proficiency. Again, census tracts with extremely low population (often parks, cemeteries and other such areas) have been removed prior to calculation.
+
+
+```{r bus_shelters_lep_plot}
+tmap_mode("view")
+tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
+  tm_shape(nyc_sds, point.per = "feature", 
+           bbox = st_bbox(filter(high_lep_bus_shelters_manbx, boro_name == "Bronx"))) + 
+  tm_borders(alpha = 0.8) + 
+  tm_text("school_dist") +
+  tm_shape(high_lep_hh_manbx) + 
+  tm_borders(alpha = 0.2) + 
+  tm_fill(col = "pct_lep", 
+          palette = "Reds",
+          title = "% LEP Households",
+          id = "NAME",
+          showNA = F,
+          popup.vars = c("Tract ID"="GEOID", "Name"="NAME", 
+                         "School District"="school_dist",
+                         "Total Households"="total_hh",
+                         "% LEP Households"="pct_lep")) +
+  tm_shape(high_lep_bus_shelters_manbx) +
+  tm_dots(col = "#42f4e2",
+          id = "shelter_id",
+          popup.vars = c("Location" = "location",
+                         "Coordinates" = "coords",
+                         "Nearby LEP Households" = "total_lep",
+                         "% LEP households in Tract" = "pct_lep"))
+
+```
+
+\  
+\  
+
+
+```{r}
+kable(shelter_table, caption = "Bus shelters in proportionally high-LEP household tracts") %>%
+  kable_styling(bootstrap_options = "striped") %>% 
+  scroll_box(height = "300px")
+
+```
+\  
+
+The entire table can be copied and pasted into a spreadsheet and will retain its formatting.
+\  
+
+```{r bus_routes}
+
+
+# Create a subset of buses that just run in Manhattan and the Bronx
+manbx_bus_sgbp <- st_intersects(nyc_bus_routes, c(manhattan_sf, bronx_sf))
+manbx_bus_routes <- nyc_bus_routes[lengths(manbx_bus_sgbp) > 0, ]
+rm(manbx_bus_sgbp)  # get rid of helper variable
+
+# Tally the value "total_lep" for its intersects with bus routes passing through
+# tracts with the attribute
+manbx_bus_routes_with_lep <- st_intersects_tally_attr(manbx_bus_routes,
+                                                      lep_hh_by_tract_C16002_manbx,
+                                                      "total_lep")
+
+
+
+manbx_bus_routes_with_lep %<>% 
+  top_n(10, total_lep) %>% 
+  arrange(desc(total_lep)) %>% 
+  mutate(route_id = fct_drop(route_id))
+
+
+```
+
+### Bus Routes Along High-LEP Areas
+
+In addition to advertising on the bus stops located within the highest-proportion LEP census tracts in New York, placing advertisements for the school on the bus lines passing near the most LEP households is another strategy. Below are the top `r nrow(manbx_bus_routes_with_lep)` routes in Manhattan and the Bronx, by the number of Low English Proficiency households they pass by (total LEP household counts of the census tracts they pass through):
+  
+  
+  ```{r bus_route_lep_plot}
+
+
+tmap_mode("view")
+tm_basemap(leaflet::providers$CartoDB.PositronNoLabels) + 
+  
+  #  NYC School Districts Base - SD Borders
+  tm_shape(nyc_sds, point.per = "feature") + 
+  tm_borders(alpha = 0.8) + 
+  tm_text("school_dist") +
+  
+  #  Polygons of high proportion Low English Proficiency Tracts  
+  tm_shape(high_lep_hh_manbx) + 
+  tm_borders(alpha = 0.2) + 
+  tm_fill(col = "pct_lep", 
+          palette = "Reds",
+          # title = "% LEP Households",
+          id = "NAME",
+          legend.show = F,
+          showNA = F,
+          alpha = 0.5,
+          popup.vars = c("Tract ID: "="GEOID", 
+                         "Name: "="NAME", 
+                         "School District: "="school_dist",
+                         "Total Households: "="total_hh",
+                         "% LEP Households: "="pct_lep")) +
+  
+  #  Top n bus routes that pass through the census tracts with the most LEP
+  #  households
+  tm_shape(manbx_bus_routes_with_lep) + 
+  tm_lines(lwd = 3,
+           id = "route_id",
+           col = "route_id",
+           palette = "Accent",
+           title.col = "Route",
+           # col= "#2eaa9e",
+           alpha = 1,
+           popup.vars = c("Route ID: " = "route_id",
+                          "Name: " = "route_long",
+                          "# LEP Households: " = "total_lep")) +
+  
+  #  Focus view to the center of the Bronx, set zoom to fill view with Bronx
+  tm_view(set.view=c(-73.88251, 40.83489, 12),
+          set.zoom.limits = c(11, 15))
+
+
+
+```
+\  
+\  
+```{r bus_route_lep_table}
+
+manbx_bus_routes_with_lep_kable <- manbx_bus_routes_with_lep %>% 
+  dplyr::select(`Route ID`=route_id, 
+                `Route Name`=route_long,
+                `LEP Households`=total_lep) %>% 
+  st_drop_geometry()
+
+kable(manbx_bus_routes_with_lep_kable, 
+      caption = paste("Top ", nrow(manbx_bus_routes_with_lep_kable), " bus routes by LEP Household Passbys, MAN/BX")) %>%
+  kable_styling(bootstrap_options = "striped")
+
+
+```
+
+\  
+
+### Applications Needed to Reach a Target Enrollment
+
+Though data has not been collected over sufficient years to make an authoritative prediction about the number of applications needed to recruit to a target enrollment, a rough estimate can be derived from the applications to registrations rate in the years with recorded registrations. 
+
+The below table outlines the current application to registration performance:
+  
+  ```{r app_to_reg}
+
+recruitment_data %>% 
+  st_drop_geometry() %>% 
+  count(year, registered) %>% 
+  complete(year, registered, fill = list(n = 0)) %>% 
+  spread(registered, n) %>% 
+  transmute(Year = year,
+            `Not Registered` = `FALSE`,
+            `Registered` = `TRUE`,
+            `Total Applications` = `Not Registered` + `Registered`) %>% 
+  kable(., caption = "Total Applications and Registrations, 2017-2019 School Years") %>% 
+  kable_styling(bootstrap_options = "striped")
+
+
+
+```
+
+
+Here, the below outlines the estimated applications that might be necessary to hit a target recruitment. This could be used as a hypothesis to test in coming years as further data comes in. A better approach could be looking at application to registration performance in top recruiting neighborhoods to see how they perform over time if recruitment efforts are focused in these neighborhoods over others, or to test whether increased or diversified efforts in underperforming neighborhoods may result in better performance in those areas. 
+
+```{r applications_needed_to_reach_target}
+
+recruitment_data %>% 
+  filter(year %in% c(2017, 2018)) %>% 
+  st_drop_geometry() %>% 
+  count(registered) %>% 
+  spread(registered, n) %>% 
+  transmute(Applied = `TRUE` + `FALSE`,
+            Registered = `TRUE`,
+            `Registration Rate` = Registered / Applied,
+            `To Reach 1200` = 1200 %/% `Registration Rate`) %>% 
+  kable(., caption = "Applications needed to reach target enrollment, based on 2017-2018 recruitment performance") %>% 
+  kable_styling(bootstrap_options = "striped")
+
+```
