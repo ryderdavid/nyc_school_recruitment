@@ -45,4 +45,7 @@ vignettes/*.pdf
 .Rproj.user
 
 # Exclude schooldata folder
-/schooldata
+/schooldata/*
+
+# Exclude data folder
+/data/*
