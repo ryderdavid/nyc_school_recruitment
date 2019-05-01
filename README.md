@@ -2,6 +2,8 @@
 
 Analysis of NYC school applications from across city for a high school in the South Bronx, New York City. These analyses were done based off of data from that school. All data had no individual student identifiers. 
 
+The output reports are too large to render directly on GitHub, but an excerpt is available at [RPubs: High School Recruitment Strategies](https://rpubs.com/ryderdavid/492165)
+
 ## Metrics investigated in report
 - Applications and registrations in 2017, 2018, 2019 by census tract
 - Application vs. registration performance gathered by school district and census tract boundary the school's applications are received from
