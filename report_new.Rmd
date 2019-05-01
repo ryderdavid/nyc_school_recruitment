@@ -1,0 +1,32 @@
+---
+title: "School Recruitment"
+author: "Ryder Cobean"
+date: "4/30/2019"
+output: html_document
+---
+
+```{r recruitment_records, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+source('tidydata.R')
+
+
+school_data_tidy %>% 
+  filter(registered_bool==F) %>% 
+  pull(school_year) %>% 
+  min() -> min_app_year
+
+school_data_tidy %>% 
+  filter(registered_bool==F) %>% 
+  pull(school_year) %>% 
+  max() -> max_app_year
+
+school_data_tidy %>% 
+  filter(registered_bool==F) %>% 
+  nrow()
+
+```
+
+## Historical Recruitment Data {.tabset}
+
+Below are the distributions of applications received from the `r paste(min_app_year, min_app_year + 1, sep='-')` to the `r paste(max_app_year, max_app_year + 1, sep='-')` school years, arranged by NYC Census Tract. In total, 
