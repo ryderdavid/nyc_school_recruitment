@@ -24,7 +24,7 @@ school_data_raw <-
   rename_all(str_to_lower)
 
 
-school_data_trimmed <-
+school_data_tidy <-
   school_data_raw %>% 
     transmute(
       application_id,
