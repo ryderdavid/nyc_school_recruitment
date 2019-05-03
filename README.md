@@ -11,7 +11,7 @@ The output reports are too large to render directly on GitHub, but an excerpt is
 - For appropriate placement of advertisements, analysis of location of all bus shelters located near census tracts with high densities of low English proficiency households in Manhattan and the Bronx, and all bus routes passing through those tracts for on-bus advertisements
 
 ## Dependencies
-- R, acs, BAMMtools, ggplot2, kableExtra, leaflet, magrittr, readxl, revgeo, rmarkdown, sf, tidyverse, tigris, tmap, tmaptools, viridis, viridisLite
+- R, acs, BAMMtools, ggplot2, kableExtra, leaflet, magrittr, readxl, rmarkdown, sf, tidyverse, tigris, tmap, tmaptools
 
 
 
